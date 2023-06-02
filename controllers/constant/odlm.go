@@ -495,8 +495,25 @@ metadata:
 spec:
   services:
   - name: ibm-licensing-operator
-    spec:
-      operandBindInfo: {}
+    resources:
+      - apiVersion: operator.ibm.com/v1alpha1
+        kind: OperandBindInfo
+        metadata:
+          name: ibm-licensing-bindinfo
+          namespace: "{{ .OperatorNs }}"
+        spec:
+          operand: ibm-licensing-operator
+          registry: common-service
+          description: Binding information that should be accessible to licensing adopters
+          bindings:
+            public-api-data:
+              secret: ibm-licensing-token
+              configmap: ibm-licensing-info
+            public-api-token:
+              secret: ibm-licensing-token
+            public-api-upload:
+              secret: ibm-licensing-upload-token
+              configmap: ibm-licensing-upload-config
   - name: ibm-mongodb-operator
     spec:
       mongoDB: {}
@@ -930,8 +947,25 @@ metadata:
 spec:
   services:
   - name: ibm-licensing-operator
-    spec:
-      operandBindInfo: {}
+    resources:
+      - apiVersion: operator.ibm.com/v1alpha1
+        kind: OperandBindInfo
+        metadata:
+          name: ibm-licensing-bindinfo
+          namespace: "{{ .OperatorNs }}"
+        spec:
+          operand: ibm-licensing-operator
+          registry: common-service
+          description: Binding information that should be accessible to licensing adopters
+          bindings:
+            public-api-data:
+              secret: ibm-licensing-token
+              configmap: ibm-licensing-info
+            public-api-token:
+              secret: ibm-licensing-token
+            public-api-upload:
+              secret: ibm-licensing-upload-token
+              configmap: ibm-licensing-upload-config
   - name: ibm-mongodb-operator
     spec:
       mongoDB: {}

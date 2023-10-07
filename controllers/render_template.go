@@ -85,6 +85,33 @@ func (r *CommonServiceReconciler) getNewConfigs(cs *unstructured.Unstructured, i
 		newConfigs = append(newConfigs, fipsEnabledConfig...)
 	}
 
+	var slice []interface{}
+	// Update operandconfig for service label
+	if cs.Object["spec"].(map[string]interface{})["services"] != nil {
+		for _, service := range cs.Object["spec"].(map[string]interface{})["services"].([]interface{}) {
+			if serviceName := service.(map[string]interface{})["name"]; serviceName != nil {
+				if labels := service.(map[string]interface{})["labels"]; labels != nil {
+					var labelsTemplate []interface{} = nil
+					for _, label := range labels.([]interface{}) {
+						labelname := label.(map[string]interface{})["name"].(string)
+						labelvalue := label.(map[string]interface{})["value"].(string)
+						newLabel := map[string]string{
+							"name":  labelname,
+							"value": labelvalue,
+						}
+						labelsTemplate = append(labelsTemplate, newLabel)
+					}
+					serviceTemplate := map[string]interface{}{
+						"name":   serviceName,
+						"labels": labelsTemplate,
+					}
+					slice = append(slice, serviceTemplate)
+				}
+			}
+		}
+		newConfigs = append(newConfigs, slice...)
+	}
+
 	// Update storageclass for API Catalog
 	if features := cs.Object["spec"].(map[string]interface{})["features"]; features != nil {
 		if apiCatalog := features.(map[string]interface{})["apiCatalog"]; apiCatalog != nil {

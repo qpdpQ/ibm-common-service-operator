@@ -57,8 +57,8 @@ spec:
           timeoutSeconds: 10
           periodSeconds: 60
           failureThreshold: 10
-        image: icr.io/cpopen/common-service-operator:latest
-        imagePullPolicy: IfNotPresent
+        image: quay.io/yuchen_li1/common-service-operator-amd64:dev
+        imagePullPolicy: Always
         name: ibm-common-service-operator
         env:
         - name: OPERATOR_NAMESPACE

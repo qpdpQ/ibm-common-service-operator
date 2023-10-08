@@ -105,29 +105,36 @@ func mergeCSCRs(csSummary, csCR, ruleSlice []interface{}, serviceControllerMappi
 		rules := getItemByName(ruleSlice, operator.(map[string]interface{})["name"].(string))
 		if summaryCR == nil || summaryCR.(map[string]interface{})["spec"] == nil {
 			summaryCR = map[string]interface{}{
-				"name": operator.(map[string]interface{})["name"].(string),
-				"spec": map[string]interface{}{},
+				"name":   operator.(map[string]interface{})["name"].(string),
+				"spec":   map[string]interface{}{},
+				"labels": []interface{}{},
 			}
 		}
 		serviceController := serviceControllerMappingSummary["profileController"]
 		if controller, ok := serviceControllerMappingSummary[operator.(map[string]interface{})["name"].(string)]; ok {
 			serviceController = controller
 		}
-		for cr, spec := range operator.(map[string]interface{})["spec"].(map[string]interface{}) {
-			if _, ok := nonDefaultProfileController[serviceController]; ok {
-				// clean up merged CS CR
-				operator.(map[string]interface{})["spec"].(map[string]interface{})[cr] = resetResourceInTemplate(spec.(map[string]interface{}), cr, rules)
-			}
-			if summaryCR.(map[string]interface{})["spec"].(map[string]interface{})[cr] == nil {
-				summaryCR.(map[string]interface{})["spec"].(map[string]interface{})[cr] = map[string]interface{}{}
-			}
-			if rules != nil && rules.(map[string]interface{})["spec"] != nil && rules.(map[string]interface{})["spec"].(map[string]interface{})[cr] != nil {
-				ruleForCR := rules.(map[string]interface{})["spec"].(map[string]interface{})[cr].(map[string]interface{})
-				sizeForCR := summaryCR.(map[string]interface{})["spec"].(map[string]interface{})[cr].(map[string]interface{})
-				summaryCR.(map[string]interface{})["spec"].(map[string]interface{})[cr] = mergeCRsIntoOperandConfig(sizeForCR, spec.(map[string]interface{}), ruleForCR, false, false)
+		if operator.(map[string]interface{})["spec"] != nil {
+			for cr, spec := range operator.(map[string]interface{})["spec"].(map[string]interface{}) {
+				if _, ok := nonDefaultProfileController[serviceController]; ok {
+					// clean up merged CS CR
+					operator.(map[string]interface{})["spec"].(map[string]interface{})[cr] = resetResourceInTemplate(spec.(map[string]interface{}), cr, rules)
+				}
+				if summaryCR.(map[string]interface{})["spec"].(map[string]interface{})[cr] == nil {
+					summaryCR.(map[string]interface{})["spec"].(map[string]interface{})[cr] = map[string]interface{}{}
+				}
+				if rules != nil && rules.(map[string]interface{})["spec"] != nil && rules.(map[string]interface{})["spec"].(map[string]interface{})[cr] != nil {
+					ruleForCR := rules.(map[string]interface{})["spec"].(map[string]interface{})[cr].(map[string]interface{})
+					sizeForCR := summaryCR.(map[string]interface{})["spec"].(map[string]interface{})[cr].(map[string]interface{})
+					summaryCR.(map[string]interface{})["spec"].(map[string]interface{})[cr] = mergeCRsIntoOperandConfig(sizeForCR, spec.(map[string]interface{}), ruleForCR, false, false)
+				}
 			}
 		}
-		csSummary = setSpecByName(csSummary, operator.(map[string]interface{})["name"].(string), summaryCR.(map[string]interface{})["spec"])
+
+		if labels := operator.(map[string]interface{})["labels"]; labels != nil {
+			summaryCR.(map[string]interface{})["labels"] = labels
+		}
+		csSummary = setSpecAndLabelsByName(csSummary, operator.(map[string]interface{})["name"].(string), summaryCR.(map[string]interface{})["spec"], summaryCR.(map[string]interface{})["labels"])
 	}
 	return csSummary
 }
@@ -304,12 +311,16 @@ func (r *CommonServiceReconciler) updateOperandConfig(ctx context.Context, newCo
 		// Fetch newConfigForOperator and rules for an operator
 		rules := getItemByName(ruleSlice, opService.(map[string]interface{})["name"].(string))
 
+		// update operandconfig with services.cr.size in cs cr
 		for cr, spec := range opService.(map[string]interface{})["spec"].(map[string]interface{}) {
 			if _, ok := nonDefaultProfileController[serviceController]; ok {
 				// clean up OperandConfig
 				opService.(map[string]interface{})["spec"].(map[string]interface{})[cr] = resetResourceInTemplate(spec.(map[string]interface{}), cr, rules)
 			}
 
+			if newConfigForOperator.(map[string]interface{})["spec"] == nil {
+				continue
+			}
 			if newConfigForOperator.(map[string]interface{})["spec"].(map[string]interface{})[cr] == nil {
 				continue
 			}
@@ -330,6 +341,29 @@ func (r *CommonServiceReconciler) updateOperandConfig(ctx context.Context, newCo
 				}
 			}
 		}
+
+		// // update operandconfig with services.labels in cs cr
+		// if newConfigForLabels := newConfigForOperator.(map[string]interface{})["labels"]; newConfigForLabels != nil {
+		// 	existinglabels := opService.(map[string]interface{})["labels"].([]interface{})
+
+		// 	// create new labelsTemplate
+		// 	var labelsTemplate []interface{} = nil
+		// 	for _, label := range labels.([]interface{}) {
+		// 		labelname := label.(map[string]interface{})["name"].(string)
+		// 		labelvalue := label.(map[string]interface{})["value"].(string)
+		// 		newLabel := map[string]string{
+		// 			"name":  labelname,
+		// 			"value": labelvalue,
+		// 		}
+		// 		labelsTemplate = append(labelsTemplate, newLabel)
+		// 	}
+
+		// 	// merged labels in different cs cr
+
+		// 	// update opconfig
+
+		// }
+
 	}
 
 	// Checking all the common service CRs to get the minimal(unique largest) size
@@ -519,7 +553,7 @@ func getItemByName(slice []interface{}, name string) interface{} {
 	return nil
 }
 
-func setSpecByName(slice []interface{}, name string, spec interface{}) []interface{} {
+func setSpecAndLabelsByName(slice []interface{}, name string, spec interface{}, labels interface{}) []interface{} {
 	for _, item := range slice {
 		if item.(map[string]interface{})["name"].(string) == name {
 			item.(map[string]interface{})["spec"] = spec

@@ -225,8 +225,10 @@ func applySizeTemplate(cs *unstructured.Unstructured, sizeTemplate string, servi
 		if configSize == nil {
 			continue
 		}
-		for cr, size := range mergeSizeProfile(configSize.(map[string]interface{})["spec"].(map[string]interface{}), config.(map[string]interface{})["spec"].(map[string]interface{})) {
-			configSize.(map[string]interface{})["spec"].(map[string]interface{})[cr] = size
+		if config.(map[string]interface{})["spec"] != nil {
+			for cr, size := range mergeSizeProfile(configSize.(map[string]interface{})["spec"].(map[string]interface{}), config.(map[string]interface{})["spec"].(map[string]interface{})) {
+				configSize.(map[string]interface{})["spec"].(map[string]interface{})[cr] = size
+			}
 		}
 	}
 	return sizes, serviceControllerMapping, nil

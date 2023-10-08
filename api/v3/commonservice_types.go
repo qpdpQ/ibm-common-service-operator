@@ -42,9 +42,15 @@ type CSData struct {
 	WatchNamespaces    string
 }
 
+type LabelConfig struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
 type ServiceConfig struct {
 	Name               string                          `json:"name"`
-	Spec               map[string]runtime.RawExtension `json:"spec"`
+	Spec               map[string]runtime.RawExtension `json:"spec,omitempty"`
+	Labels             []LabelConfig                   `json:"labels,omitempty"`
 	ManagementStrategy string                          `json:"managementStrategy,omitempty"`
 }
 

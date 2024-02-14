@@ -51,7 +51,7 @@ function parse_arguments() {
 
 
 function setup_mongo_pvc() {
-    STGCLASS=$(oc get pvc --no-headers=true mongodbdir-icp-mongodb-0 -n $NAMESPACE | awk '{ print $6 }')
+    STGCLASS=$(kubectl get pvc --no-headers=true mongodbdir-icp-mongodb-0 -n $NAMESPACE | awk '{ print $6 }')
 	cat <<EOF | oc apply -f -
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -72,7 +72,7 @@ EOF
 }
 
 function setup_mongo_deployment() {
-    cat <<EOF | oc apply -f -
+    cat <<EOF | kubectl apply -f -
 kind: Deployment
 apiVersion: apps/v1
 metadata:

@@ -24,31 +24,11 @@ NAMESPACE=""
 # ---------- Main functions ----------
 
 function main() {
-    parse_arguments "$@"
+    NAMESPACE=$1
     setup_mongo_pvc
     setup_mongo_deployment
 
 }
-
-function parse_arguments() {
-    # process options
-    while [[ "$@" != "" ]]; do
-        case "$1" in
-        -n)
-            NAMESPACE=$2
-            ;;
-        -h | --help)
-            print_usage
-            exit 1
-            ;;
-        *) 
-            echo "wildcard"
-            ;;
-        esac
-        shift
-    done
-}
-
 
 function setup_mongo_pvc() {
     STGCLASS=$(kubectl get pvc --no-headers=true mongodbdir-icp-mongodb-0 -n $NAMESPACE | awk '{ print $6 }')

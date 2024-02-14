@@ -35,7 +35,7 @@ function parse_arguments() {
     while [[ "$@" != "" ]]; do
         case "$1" in
         -n)
-            NAMESPACE=$1
+            NAMESPACE=$2
             ;;
         -h | --help)
             print_usage

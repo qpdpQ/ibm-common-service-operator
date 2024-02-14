@@ -81,7 +81,6 @@ spec:
         command: ["bash", "-c", "sleep infinity"]
         volumeMounts:
         - mountPath: "/dump"
-          subpath: dump
           name: mongodump
         - mountPath: "/cred/mongo-certs"
           name: icp-mongodb-client-cert

@@ -48,9 +48,7 @@ spec:
     labelSelector: foundationservices.cloudpak.ibm.com=pull-secret
     name: pull-secret
     type: resource
-  - includedNamespaces:
-    - kube-public
-    includedResourceTypes:
+  - includedResourceTypes:
     - configmaps
     labelSelector: foundationservices.cloudpak.ibm.com=configmap
     name: common-services-configmaps

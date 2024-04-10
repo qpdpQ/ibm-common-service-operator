@@ -1,0 +1,182 @@
+apiVersion: spp-data-protection.isf.ibm.com/v1alpha1
+kind: Recipe
+metadata:
+  annotations:
+    dp.isf.ibm.com/restore-same-namespace-only: "true"
+  labels:
+    icpdsupport/addOnId: cpdbr
+    icpdsupport/app: br-service
+    icpdsupport/version: 4.8.3
+  name: ibmcpd-tenant
+spec:
+  appType: cpd-tenant
+  groups:
+  - labelSelector: icpdsupport/empty-on-nd-backup notin (true),icpdsupport/ignore-on-nd-backup notin (true)
+    name: cpd-volumes
+    type: volume
+  - excludedResourceTypes:
+    - event
+    - event.events.k8s.io
+    - imagetags.openshift.io
+    - pod
+    - catalogsources.operators.coreos.com
+    - subscriptions.operators.coreos.com
+    - clusterserviceversions.operators.coreos.com
+    - installplans.operators.coreos.com
+    - clients.oidc.security.ibm.com
+    - authentication.operator.ibm.com
+    - challenges.acme.cert-manager.io
+    - orders.acme.cert-manager.io
+    - certificaterequests.cert-manager.io
+    labelSelector: icpdsupport/ignore-on-nd-backup notin (true)
+    name: cpd-resources
+    type: resource
+  - backupRef: cpd-resources
+    includeClusterResources: true
+    includedResourceTypes:
+    - customresourcedefinitions.apiextensions.k8s.io
+    - securitycontextconstraints.security.openshift.io
+    name: cpd-crd-resources
+    type: resource
+  - backupRef: cpd-resources
+    includedResourceTypes:
+    - operatorgroups
+    - serviceaccount
+    - role
+    - rolebinding
+    - recipe.spp-data-protection.isf.ibm.com
+    - namespacescopes.operator.ibm.com
+    - commonservices.operator.ibm.com
+    name: cpd-operator-resources
+    type: resource
+  - backupRef: cpd-resources
+    includedResourceTypes:
+    - deployments
+    - configmaps
+    labelSelector: icpdsupport/addOnId=cpdbr,icpdsupport/app=br-service
+    name: cpd-br-resources
+    type: resource
+  - backupRef: cpd-resources
+    includedResourceTypes:
+    - secrets
+    - configmaps
+    - certificates.cert-manager.io
+    - certificates.certmanager.k8s.io
+    - issuers.cert-manager.io
+    - issuers.certmanager.k8s.io
+    - clusters.postgresql.k8s.enterprisedb.io
+    name: cpd-pre-req-resources
+    type: resource
+  - backupRef: cpd-resources
+    excludedResourceTypes:
+    - operatorgroups
+    - serviceaccount
+    - role
+    - rolebinding
+    - recipe.spp-data-protection.isf.ibm.com
+    - namespacescopes.operator.ibm.com
+    - commonservices.operator.ibm.com
+    - secrets
+    - configmaps
+    - certificates.cert-manager.io
+    - certificates.certmanager.k8s.io
+    - issuers.cert-manager.io
+    - issuers.certmanager.k8s.io
+    - clusters.postgresql.k8s.enterprisedb.io
+    - deployments.apps
+    - statefulsets.apps
+    - daemonsets.apps
+    - replicasets.apps
+    - controllerrevisions.apps
+    - cronjobs.batch
+    - jobs.batch
+    - challenges.acme.cert-manager.io
+    - orders.acme.cert-manager.io
+    - certificaterequests.cert-manager.io
+    name: cpd-pre-workload-resources
+    type: resource
+  - backupRef: cpd-resources
+    includedResourceTypes:
+    - deployments.apps
+    - statefulsets.apps
+    - daemonsets.apps
+    - replicasets.apps
+    - controllerrevisions.apps
+    - cronjobs.batch
+    - jobs.batch
+    name: cpd-workload-resources
+    type: resource
+  hooks:
+  - labelSelector: icpdsupport/addOnId=cpdbr,icpdsupport/app=br-service
+    name: br-service-hooks
+    namespace: ${PARENT_NAMESPACE}
+    ops:
+    - command: '["/cpdbr-scripts/cpdbr/cpdbr-cpd-operators.sh", "backup", "--backup-iam-data", "--operators-namespace",
+        "${PARENT_NAMESPACE}", "--foundation-namespace", "${PARENT_NAMESPACE}"]'
+      container: main
+      name: operators-backup
+      timeout: 600
+    - command: '["/cpdbr-scripts/cpdbr/cpdbr-cpd-operators.sh", "restore", "--operators-namespace",
+        "${PARENT_NAMESPACE}", "--foundation-namespace", "${PARENT_NAMESPACE}"]'
+      container: main
+      name: operators-restore
+      timeout: 7200
+    - command: '["/usr/bin/sleep", "300"]'
+      container: main
+      name: edb-restore-delay
+      timeout: 320
+    - command: '["/cpdbr-scripts/cpdbr/cpdbr-cpd-operators.sh", "isolate-namespacescope", "--operators-namespace",
+        "${PARENT_NAMESPACE}", "--foundation-namespace", "${PARENT_NAMESPACE}"]'
+      container: main
+      name: isolate-namespacescope
+      timeout: 7200
+    - command: '["/cpdbr-scripts/cpdbr/cpdbr-cpd-operators.sh", "restore-namespacescope", "--operators-namespace",
+        "${PARENT_NAMESPACE}", "--foundation-namespace", "${PARENT_NAMESPACE}"]'
+      container: main
+      name: restore-namespacescope
+      timeout: 7200
+    - command: '["/cpdbr-scripts/cpdbr/checkpoint_create.sh", "--tenant-operator-namespace=${PARENT_NAMESPACE}"]'
+      container: main
+      name: checkpoint
+      timeout: 1800
+    - command: '["/cpdbr-scripts/cpdbr/checkpoint_backup_prehooks.sh", "--tenant-operator-namespace=${PARENT_NAMESPACE}"]'
+      container: main
+      name: pre-backup
+      timeout: 600
+    - command: '["/cpdbr-scripts/cpdbr/checkpoint_backup_posthooks.sh", "--tenant-operator-namespace=${PARENT_NAMESPACE}"]'
+      container: main
+      name: post-backup
+      timeout: 600
+    - command: '["/cpdbr-scripts/cpdbr/checkpoint_restore_preworkloadhooks.sh", "--include-namespaces=${GROUP.cpd-resources.namespaces}"]'
+      container: main
+      name: pre-workload
+      timeout: 1800
+    - command: '["/cpdbr-scripts/cpdbr/checkpoint_restore_posthooks.sh", "--scale-wait-timeout=30m", "--include-namespaces=${GROUP.cpd-resources.namespaces}"]'
+      container: main
+      name: post-workload
+      timeout: 7200
+    type: exec
+  workflows:
+  - name: backup
+    sequence:
+    - hook: br-service-hooks/operators-backup
+    - hook: br-service-hooks/checkpoint
+    - hook: br-service-hooks/pre-backup
+    - group: cpd-volumes
+    - hook: br-service-hooks/post-backup
+    - group: cpd-resources
+  - name: restore
+    sequence:
+    - group: cpd-volumes
+    - group: cpd-crd-resources
+    - group: cpd-operator-resources
+    - group: cpd-br-resources
+    - hook: br-service-hooks/operators-restore
+    - group: cpd-pre-req-resources
+    - hook: br-service-hooks/edb-restore-delay
+    - hook: br-service-hooks/isolate-namespacescope
+    - group: cpd-pre-workload-resources
+    - hook: br-service-hooks/pre-workload
+    - group: cpd-workload-resources
+    - hook: br-service-hooks/post-workload
+    - hook: br-service-hooks/restore-namespacescope

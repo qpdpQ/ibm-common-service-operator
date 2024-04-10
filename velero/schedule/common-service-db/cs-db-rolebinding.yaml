@@ -2,15 +2,15 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: cs-db-backup-rolebinding
-  namespace: <cs-db namespace>
+  namespace: cs1
   labels:
     foundationservices.cloudpak.ibm.com: cs-db-data
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: cs-db-backup-role
-  namespace: <cs-db namespace>
+  namespace: cs1
 subjects:
 - kind: ServiceAccount
   name: cs-db-backup-sa
-  namespace: <cs-db namespace>
+  namespace: cs1

@@ -2,7 +2,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: cs-db-backup-role
-  namespace: <cs-db namespace>
+  namespace: cs1
   labels:
     foundationservices.cloudpak.ibm.com: cs-db-data
 rules:

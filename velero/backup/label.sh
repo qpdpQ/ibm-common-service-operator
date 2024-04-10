@@ -27,6 +27,13 @@ oc label subscriptions.operators.coreos.com ibm-common-service-operator foundati
 oc label commonservices common-service foundationservices.cloudpak.ibm.com=commonservice --overwrite=true -n cs1
 oc label customresourcedefinition commonservices.operator.ibm.com foundationservices.cloudpak.ibm.com=crd --overwrite=true
 
+oc label customresourcedefinition issuers.cert-manager.io foundationservices.cloudpak.ibm.com=cert-manager --overwrite=true
+oc label customresourcedefinition certificates.cert-manager.io foundationservices.cloudpak.ibm.com=cert-manager --overwrite=true
+
+oc label customresourcedefinition zenservices.zen.cpd.ibm.com foundationservices.cloudpak.ibm.com=zen --overwrite=true
+oc label customresourcedefinition zenextensions.zen.cpd.ibm.com foundationservices.cloudpak.ibm.com=zen --overwrite=true
+
 oc label operandrequests common-service foundationservices.cloudpak.ibm.com=operand --overwrite=true -n cs1
 oc label operandconfig common-service foundationservices.cloudpak.ibm.com=operand --overwrite=true -n cs1
 
+oc label zenservice lite-zen foundationservices.cloudpak.ibm.com=zen --overwrite=true -n cs1

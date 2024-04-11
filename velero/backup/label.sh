@@ -20,8 +20,8 @@ oc label operatorgroup ${cert_mgr_og} foundationservices.cloudpak.ibm.com=operat
 licensing_og=$(oc get operatorgroup -A --no-headers | grep ibm-licensing | awk '{print $2}')
 oc label operatorgroup ${licensing_og} foundationservices.cloudpak.ibm.com=operatorgroup --overwrite=true -n ibm-licensing
 
-oc label subscriptions.operators.coreos.com ibm-cert-manager-operator foundationservices.cloudpak.ibm.com=subscription --overwrite=true -n ibm-cert-manager
-oc label subscriptions.operators.coreos.com ibm-licensing-operator-app foundationservices.cloudpak.ibm.com=subscription --overwrite=true -n ibm-licensing
+oc label subscriptions.operators.coreos.com ibm-cert-manager-operator foundationservices.cloudpak.ibm.com=singleton-subscription --overwrite=true -n ibm-cert-manager
+oc label subscriptions.operators.coreos.com ibm-licensing-operator-app foundationservices.cloudpak.ibm.com=singleton-subscription --overwrite=true -n ibm-licensing
 oc label subscriptions.operators.coreos.com ibm-common-service-operator foundationservices.cloudpak.ibm.com=subscription --overwrite=true -n cs1
 
 oc label commonservices common-service foundationservices.cloudpak.ibm.com=commonservice --overwrite=true -n cs1

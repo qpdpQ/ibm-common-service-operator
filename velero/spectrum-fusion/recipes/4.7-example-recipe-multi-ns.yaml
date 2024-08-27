@@ -102,6 +102,11 @@ spec:
       name: common-services-configmaps
       type: resource
     - includedResourceTypes:
+        - secrets
+      labelSelector: foundationservices.cloudpak.ibm.com=user-mgmt
+      name: user-mgmt-secret
+      type: resource
+    - includedResourceTypes:
         - roles
         - rolebindings
         - serviceaccounts
@@ -525,6 +530,7 @@ spec:
         - group: common-services-catalogs
         - group: common-services-operatorgroups
         - group: common-services-configmaps
+        - group: user-mgmt-secret
         - group: license-service-reporter-crd
         - group: commonservice-crd
         - group: commonservice-cr
@@ -549,6 +555,7 @@ spec:
         - group: common-services-catalogs
         - group: common-services-operatorgroups
         - group: common-services-configmaps
+        - group: user-mgmt-secret
         - group: commonservice-crd
         - group: cert-manager-crd
         - group: license-service-reporter-crd

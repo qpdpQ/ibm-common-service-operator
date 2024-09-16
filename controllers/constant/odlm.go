@@ -1799,6 +1799,20 @@ spec:
           - operands:
               - name: ibm-im-operator
             registry: common-service
+  - name: ibm-bts-operator-v3.34
+    spec:
+      operandRequest:
+        requests:
+          - operands:
+              - name: ibm-im-operator
+            registry: common-service
+  - name: ibm-bts-operator-v3.35
+    spec:
+      operandRequest:
+        requests:
+          - operands:
+              - name: ibm-im-operator
+            registry: common-service
   - name: ibm-zen-operator
     spec:
       operandBindInfo: {}

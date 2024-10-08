@@ -2,66 +2,48 @@
   {
     "imageType": "external",
     "sourceRepo": "registry.access.redhat.com",
-    "sourceNamespace": "ubi8",
-    "sourceImage": "ubi",
+    "sourceNamespace": "ubi9",
+    "sourceImage": "ubi-micro",
     "destStage": "edge",
     "destNamespace": "build-images",
-    "destImage": "ubi8",
-    "tag": "8.9-1107.1706791207",
-    "updatePackages": []
-  },
-  {
-    "imageType": "external",
-    "sourceRepo": "registry.access.redhat.com",
-    "sourceNamespace": "ubi8",
-    "sourceImage": "ubi-minimal",
-    "destStage": "edge",
-    "destNamespace": "build-images",
-    "destImage": "ubi8-minimal",
-    "tag": "8.9-1108.1706795067",
+    "destImage": "ubi9-micro",
+    "tag": "9.4-15",
     "updatePackages": []
   },
   {
     "imageType": "external",
     "sourceRepo": "registry.access.redhat.com",
     "sourceNamespace": "ubi9",
-    "sourceImage": "ubi-micro",
+    "sourceImage": "ubi",
     "destStage": "edge",
     "destNamespace": "build-images",
-    "destImage": "ubi9-micro",
-    "tag": "9.3-13",
+    "destImage": "ubi9",
+    "tag": "9.4-1214.1726694543",
     "updatePackages": []
   },
   {
     "imageType": "external",
-    "sourceRepo": "quay.io",
-    "sourceNamespace": "operator-framework",
-    "sourceImage": "helm-operator",
+    "sourceRepo": "registry.access.redhat.com",
+    "sourceNamespace": "ubi9",
+    "sourceImage": "ubi-minimal",
     "destStage": "edge",
     "destNamespace": "build-images",
-    "destImage": "helm-operator",
-    "tag": "v1.33.0",
+    "destImage": "ubi9-minimal",
+    "tag": "9.4-1227.1726694542",
     "updatePackages": []
   },
   {
     "imageType": "node",
-    "sourceImage": "ubi8-minimal",
-    "sourceTag": "8.9-1108.1706795067",
-    "destImage": "node-v18-ubi8-minimal",
-    "nodeVersion": "18.19.0"
+    "sourceImage": "ubi9-minimal",
+    "sourceTag": "9.4-1227.1726694542",
+    "destImage": "node-v18-ubi9-minimal",
+    "nodeVersion": "18.20.4"
   },
   {
     "imageType": "node",
-    "sourceImage": "ubi8-minimal",
-    "sourceTag": "8.9-1108.1706795067",
-    "destImage": "node-v20-ubi8-minimal",
-    "nodeVersion": "20.11.0"
-  },
-  {
-    "imageType": "liberty",
-    "sourceImage": "node-v18-ubi8-minimal",
-    "sourceTag": "18.19.0_8.9-1108.1706795067",
-    "destImage": "liberty11-ubi8-minimal",
-    "libertyVersion": "24.0.0.1"
+    "sourceImage": "ubi9-minimal",
+    "sourceTag": "9.4-1227.1726694542",
+    "destImage": "node-v20-ubi9-minimal",
+    "nodeVersion": "20.17.0"
   }
 ]

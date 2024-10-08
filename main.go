@@ -37,22 +37,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/IBM/controller-filtered-cache/filteredcache"
-	nssv1 "github.com/IBM/ibm-namespace-scope-operator/api/v1"
+	nssv1 "github.com/IBM/ibm-namespace-scope-operator/v4/api/v1"
 	ssv1 "github.com/IBM/ibm-secretshare-operator/api/v1"
-	odlm "github.com/IBM/operand-deployment-lifecycle-manager/api/v1alpha1"
+	odlm "github.com/IBM/operand-deployment-lifecycle-manager/v4/api/v1alpha1"
 
 	certmanagerv1 "github.com/ibm/ibm-cert-manager-operator/apis/cert-manager/v1"
-	cmconstants "github.com/ibm/ibm-cert-manager-operator/controllers/resources"
 
-	operatorv3 "github.com/IBM/ibm-common-service-operator/api/v3"
-	"github.com/IBM/ibm-common-service-operator/controllers"
-	"github.com/IBM/ibm-common-service-operator/controllers/bootstrap"
-	certmanagerv1controllers "github.com/IBM/ibm-common-service-operator/controllers/cert-manager"
-	util "github.com/IBM/ibm-common-service-operator/controllers/common"
-	"github.com/IBM/ibm-common-service-operator/controllers/constant"
-	"github.com/IBM/ibm-common-service-operator/controllers/goroutines"
-	commonservicewebhook "github.com/IBM/ibm-common-service-operator/controllers/webhooks/commonservice"
-	operandrequestwebhook "github.com/IBM/ibm-common-service-operator/controllers/webhooks/operandrequest"
+	operatorv3 "github.com/IBM/ibm-common-service-operator/v4/api/v3"
+	"github.com/IBM/ibm-common-service-operator/v4/controllers"
+	"github.com/IBM/ibm-common-service-operator/v4/controllers/bootstrap"
+	certmanagerv1controllers "github.com/IBM/ibm-common-service-operator/v4/controllers/cert-manager"
+	util "github.com/IBM/ibm-common-service-operator/v4/controllers/common"
+	"github.com/IBM/ibm-common-service-operator/v4/controllers/constant"
+	"github.com/IBM/ibm-common-service-operator/v4/controllers/goroutines"
+	commonservicewebhook "github.com/IBM/ibm-common-service-operator/v4/controllers/webhooks/commonservice"
+	operandrequestwebhook "github.com/IBM/ibm-common-service-operator/v4/controllers/webhooks/operandrequest"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -100,7 +99,7 @@ func main() {
 			LabelSelector: constant.CsManagedLabel,
 		},
 		corev1.SchemeGroupVersion.WithKind("Secret"): {
-			LabelSelector: cmconstants.SecretWatchLabel,
+			LabelSelector: constant.SecretWatchLabel,
 		},
 	}
 	clusterGVKList := []schema.GroupVersionKind{
@@ -153,8 +152,6 @@ func main() {
 			klog.Errorf("Cleanup Webhook Resources failed: %v", err)
 			os.Exit(1)
 		}
-		// Create or Update CPP configuration
-		go goroutines.CreateUpdateConfig(bs)
 		// Update CS CR Status
 		go goroutines.UpdateCsCrStatus(bs)
 		// Create CS CR

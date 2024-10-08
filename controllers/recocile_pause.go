@@ -19,7 +19,7 @@ package controllers
 import (
 	"k8s.io/klog"
 
-	apiv3 "github.com/IBM/ibm-common-service-operator/api/v3"
+	apiv3 "github.com/IBM/ibm-common-service-operator/v4/api/v3"
 )
 
 const (
@@ -30,11 +30,10 @@ const (
 
 func (r *CommonServiceReconciler) reconcilePauseRequest(instance *apiv3.CommonService) bool {
 
-	klog.Info("Request Stage: ReconcilePauseRequest")
+	//klog.Info("Request Stage: ReconcilePauseRequest")
 
 	// if the given CommnService CR has not been existing
 	if instance == nil {
-		klog.Warningf("CommonService CR %s/%s is not existing", instance.Name, instance.Namespace)
 		return false
 	}
 
@@ -47,7 +46,7 @@ func (r *CommonServiceReconciler) reconcilePauseRequest(instance *apiv3.CommonSe
 }
 
 func (r *CommonServiceReconciler) pauseRequestExists(instance *apiv3.CommonService) bool {
-	klog.Info("Request Stage: Checking annotations for pause request")
+	klog.Info("Checking annotations for pause request")
 
 	// if there is pause or self-pause request annotation in the CommonService CR, pause request takes precedence over self-pause request
 	var pauseRequestFound bool

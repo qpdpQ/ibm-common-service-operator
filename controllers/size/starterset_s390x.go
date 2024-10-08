@@ -70,6 +70,26 @@ const StarterSet = `
           limits:
             cpu: 1000m
             memory: 350Mi
+- name: common-service-postgresql
+  resources:
+  - apiVersion: postgresql.k8s.enterprisedb.io/v1
+    kind: Cluster
+    name: common-service-db
+    data:
+      spec:
+        instances: 1
+        resources:
+          limits:
+            cpu: 300m
+            memory: 768Mi
+            ephemeral-storage: 768Mi
+          requests:
+            ephemeral-storage: 128Mi
+            cpu: 75m
+            memory: 256Mi
+        postgresql:
+          parameters:
+            max_connections: "400"
 - name: ibm-im-mongodb-operator
   spec:
     mongoDB:
@@ -571,6 +591,46 @@ const StarterSet = `
             ephemeral-storage: 256Mi
             cpu: 80m
             memory: 130Mi
+- name: ibm-im-operator-v4.6
+  spec:
+    authentication:
+      replicas: 1
+      authService:
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 650Mi
+          requests:
+            ephemeral-storage: 256Mi
+            cpu: 140m
+            memory: 525Mi
+      clientRegistration:
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 50Mi
+          requests:
+            ephemeral-storage: 256Mi
+            cpu: 20m
+            memory: 50Mi
+      identityManager:
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 220Mi
+          requests:
+            ephemeral-storage: 256Mi
+            cpu: 50m
+            memory: 120Mi
+      identityProvider:
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 230Mi
+          requests:
+            ephemeral-storage: 256Mi
+            cpu: 80m
+            memory: 130Mi
 - name: ibm-management-ingress-operator
   spec:
     managementIngress:
@@ -729,6 +789,18 @@ const StarterSet = `
         limits:
           memory: 440Mi
           cpu: 1000m
+- name: ibm-idp-config-ui-operator-v4.5
+  spec:
+    commonWebUI:
+      replicas: 1
+      resources:
+        requests:
+          ephemeral-storage: 256Mi
+          memory: 256Mi
+          cpu: 150m
+        limits:
+          memory: 440Mi
+          cpu: 1000m
 - name: ibm-platform-api-operator
   spec:
     platformApi:
@@ -851,7 +923,9 @@ const StarterSet = `
                     limits:
                       cpu: 1000m
                       memory: 1Gi
+                      ephemeral-storage: 512Mi
                     requests:
                       cpu: 1000m
                       memory: 1Gi
+                      ephemeral-storage: 256Mi
 `

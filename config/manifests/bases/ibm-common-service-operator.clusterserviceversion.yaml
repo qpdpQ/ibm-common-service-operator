@@ -4,14 +4,16 @@ metadata:
   annotations:
     alm-examples: '[]'
     capabilities: Seamless Upgrades
+    cloudPakThemesVersion: styles4100.css
     containerImage: icr.io/cpopen/common-service-operator:latest
     createdAt: "2020-10-19T21:38:33Z"
-    description: The IBM Cloud Pak foundational services operator is used to deploy IBM foundational services.
+    description: The IBM Cloud Pak foundational services operator is used to deploy
+      IBM foundational services.
     nss.operator.ibm.com/managed-operators: ibm-common-service-operator
     nss.operator.ibm.com/managed-webhooks: ""
     olm.skipRange: ""
-    operatorChannel: v4.5
-    operatorVersion: 4.5.0
+    operatorChannel: v4.10
+    operatorVersion: 4.10.0
     operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-v1.2.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v2
@@ -35,29 +37,31 @@ spec:
       kind: CommonService
       name: commonservices.operator.ibm.com
       specDescriptors:
-      - displayName: License
+      - description: License information for this instance. You must accept the license.
+        displayName: License
         path: license
-        description: License information for this instance. You must accept the license.
-      - description: Read and accept the license that is applicable to your installation. For more information, see https://ibm.biz/icpfs39license
+      - description: Read and accept the license that is applicable to your installation.
+          For more information, see https://ibm.biz/icpfs39license
         displayName: Accept
         path: license.accept
         value:
-          - false
+        - false
         x-descriptors:
-          - urn:alm:descriptor:com.tectonic.ui:checkbox
+        - urn:alm:descriptor:com.tectonic.ui:checkbox
       - path: license.license
         x-descriptors:
-          - urn:alm:descriptor:com.tectonic.ui:hidden
+        - urn:alm:descriptor:com.tectonic.ui:hidden
       - path: license.use
         x-descriptors:
-          - urn:alm:descriptor:com.tectonic.ui:hidden
+        - urn:alm:descriptor:com.tectonic.ui:hidden
       - path: license.key
         x-descriptors:
-          - urn:alm:descriptor:com.tectonic.ui:hidden
+        - urn:alm:descriptor:com.tectonic.ui:hidden
       - path: license.use
         x-descriptors:
-          - urn:alm:descriptor:com.tectonic.ui:hidden
-      - description: The size of deployment profile for IBM Cloud Pak foundational services.
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: The size of deployment profile for IBM Cloud Pak foundational
+          services.
         displayName: Size
         path: size
         x-descriptors:
@@ -75,7 +79,6 @@ spec:
         path: servicesNamespace
         x-descriptors:
         - urn:alm:descriptor:io.kubernetes:Namespace
-      # ----------- Advanced Section -----------
       - displayName: Storage class
         path: storageClass
         x-descriptors:
@@ -83,6 +86,11 @@ spec:
         - urn:alm:descriptor:com.tectonic.ui:advanced
       - displayName: FIPS mode
         path: fipsEnabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: HugePages Setting
+        path: hugePages.enable
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
         - urn:alm:descriptor:com.tectonic.ui:advanced
@@ -123,7 +131,6 @@ spec:
         - urn:alm:descriptor:com.tectonic.ui:select:Automatic
         - urn:alm:descriptor:com.tectonic.ui:select:Manual
         - urn:alm:descriptor:com.tectonic.ui:advanced
-      # ----------- Hidden Section -----------
       - path: manualManagement
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:hidden
@@ -163,9 +170,8 @@ spec:
 
     When you install this operator, the operator completes the following tasks:
 
-      - Installs ODLM in all namespaces mode
-      - Creates the `ibm-common-services` namespace
-      - Creates the Common Services `OperandRegistry` and `OperandConfig` in the `ibm-common-services` namespace
+      - Installs ODLM operator namespace
+      - Creates the Common Services `OperandRegistry` and `OperandConfig` in the service namespace
 
     # Details
     For more information about installing this operator and other Common Services operators, see [Installer documentation](http://ibm.biz/cpcs_opinstall). If you are using this operator as part of an IBM Cloud Pak, see the documentation for that IBM Cloud Pak to learn more about how to install and use the operator service. For more information about IBM Cloud Paks, see [IBM Cloud Paks that use Common Services](http://ibm.biz/cpcs_cloudpaks).
@@ -182,7 +188,7 @@ spec:
 
     ## Operator versions
 
-     - 4.5.0
+     - 4.10.0
 
     ## Prerequisites
 
@@ -254,8 +260,6 @@ spec:
   provider:
     name: IBM
   relatedImages:
-  - image: icr.io/cpopen/common-service-operator:4.5.0
+  - image: icr.io/cpopen/common-service-operator:4.10.0
     name: COMMON_SERVICE_OPERATOR_IMAGE
-  - image: icr.io/cpopen/cpfs/cpfs-utils:latest
-    name: CPFS_UTILS_IMAGE
   version: 0.0.0

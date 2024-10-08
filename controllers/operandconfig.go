@@ -30,10 +30,10 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv3 "github.com/IBM/ibm-common-service-operator/api/v3"
-	util "github.com/IBM/ibm-common-service-operator/controllers/common"
-	"github.com/IBM/ibm-common-service-operator/controllers/constant"
-	"github.com/IBM/ibm-common-service-operator/controllers/rules"
+	apiv3 "github.com/IBM/ibm-common-service-operator/v4/api/v3"
+	util "github.com/IBM/ibm-common-service-operator/v4/controllers/common"
+	"github.com/IBM/ibm-common-service-operator/v4/controllers/constant"
+	"github.com/IBM/ibm-common-service-operator/v4/controllers/rules"
 )
 
 var (
@@ -164,7 +164,7 @@ func mergeCSCRs(csSummary, csCR, ruleSlice []interface{}, serviceControllerMappi
 				}
 				newResource := getItemByGVKNameNamespace(summaryCR.(map[string]interface{})["resources"].([]interface{}), opconNs, apiVersion, kind, name, namespace)
 				if newResource != nil {
-					operator.(map[string]interface{})["resources"].([]interface{})[i] = mergeCRsIntoOperandConfigWithDefaultRules(opResource.(map[string]interface{}), newResource.(map[string]interface{}), true)
+					operator.(map[string]interface{})["resources"].([]interface{})[i] = mergeCRsIntoOperandConfigWithDefaultRules(opResource.(map[string]interface{}), newResource.(map[string]interface{}), false)
 				}
 			}
 			csSummary = setResByName(csSummary, operator.(map[string]interface{})["name"].(string), operator.(map[string]interface{})["resources"].([]interface{}))
@@ -175,7 +175,6 @@ func mergeCSCRs(csSummary, csCR, ruleSlice []interface{}, serviceControllerMappi
 
 // mergeCRsIntoOperandConfig merges CRs by specific rules
 func mergeCRsIntoOperandConfigWithDefaultRules(defaultMap map[string]interface{}, changedMap map[string]interface{}, directAssign bool) map[string]interface{} {
-	// TODO: Apply default rules
 	for key := range defaultMap {
 		if reflect.DeepEqual(defaultMap[key], changedMap[key]) {
 			continue
@@ -233,12 +232,13 @@ func mergeChangedMap(key string, defaultMap interface{}, changedMap interface{},
 				changedMapRef := changedMap.([]interface{})
 				for i := range defaultMapRef {
 					if _, ok := defaultMapRef[i].(map[string]interface{}); ok {
-						for newKey := range defaultMapRef[i].(map[string]interface{}) {
-							// check if the changedMapRef[i] is nil
-							if changedMapRef[i] == nil {
-								changedMapRef[i] = map[string]interface{}{}
+						if len(changedMapRef) <= i {
+							finalMap[key] = append(finalMap[key].([]interface{}), defaultMapRef[i])
+						} else {
+
+							for newKey := range defaultMapRef[i].(map[string]interface{}) {
+								mergeChangedMap(newKey, defaultMapRef[i].(map[string]interface{})[newKey], changedMapRef[i].(map[string]interface{})[newKey], finalMap[key].([]interface{})[i].(map[string]interface{}), directAssign)
 							}
-							mergeChangedMap(newKey, defaultMapRef[i].(map[string]interface{})[newKey], changedMapRef[i].(map[string]interface{})[newKey], finalMap[key].([]interface{})[i].(map[string]interface{}), directAssign)
 						}
 					}
 				}
@@ -249,13 +249,14 @@ func mergeChangedMap(key string, defaultMap interface{}, changedMap interface{},
 				finalMap[key] = defaultMap
 			} else {
 				var comparableKeys = map[string]bool{
-					"replicas":     true,
-					"cpu":          true,
-					"memory":       true,
-					"profile":      true,
-					"fipsEnabled":  true,
-					"fips_enabled": true,
-					"instances":    true,
+					"replicas":        true,
+					"cpu":             true,
+					"memory":          true,
+					"profile":         true,
+					"fipsEnabled":     true,
+					"fips_enabled":    true,
+					"instances":       true,
+					"max_connections": true,
 				}
 				if _, ok := comparableKeys[key]; ok {
 					if directAssign {
@@ -342,12 +343,13 @@ func deepMergeTwoMaps(key string, defaultMap interface{}, changedMap interface{}
 			changedMapRef := changedMap.([]interface{})
 			for i := range defaultMapRef {
 				if _, ok := defaultMapRef[i].(map[string]interface{}); ok {
-					for newKey := range defaultMapRef[i].(map[string]interface{}) {
-						// check if the changedMapRef[i] is nil
-						if changedMapRef[i] == nil {
-							changedMapRef[i] = map[string]interface{}{}
+					if len(changedMapRef) <= i {
+						finalMap[key] = append(finalMap[key].([]interface{}), defaultMapRef[i])
+					} else {
+
+						for newKey := range defaultMapRef[i].(map[string]interface{}) {
+							deepMergeTwoMaps(newKey, defaultMapRef[i].(map[string]interface{})[newKey], changedMapRef[i].(map[string]interface{})[newKey], finalMap[key].([]interface{})[i].(map[string]interface{}))
 						}
-						deepMergeTwoMaps(newKey, defaultMapRef[i].(map[string]interface{})[newKey], changedMapRef[i].(map[string]interface{})[newKey], finalMap[key].([]interface{})[i].(map[string]interface{}))
 					}
 				}
 			}

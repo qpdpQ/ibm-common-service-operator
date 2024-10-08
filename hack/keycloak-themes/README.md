@@ -4,6 +4,16 @@ A Keycloak theme for IBM Cloud Paks.
 
 See https://www.keycloak.org/docs/latest/server_development/index.html#_themes
 
+**The style files are cached, so if you update the them, remember to update the style file name and the `styles` property in `theme.properties`.**
+For example, for CS 4.6:
+theme/cloudpak/login/resources/css/styles470.css
+theme/cloudpak/login/theme.properies styles=css/styles470.css
+NOTE: this would likely apply to any of the files - images, fonts, etc.  If updated, they must be renamed.
+
+### Style version for release 4.10.0
+theme/cloudpak/login/resources/css/styles4100.css
+theme/cloudpak/login/theme.properies styles=css/styles4100.css
+
 ## Testing
 
 Easiest way to play with it is to mount it into a local keycloak dev container.

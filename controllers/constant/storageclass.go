@@ -49,4 +49,15 @@ const StorageClassTemplate = `
             storageClass: placeholder
       kind: Cluster
       name: keycloak-edb-cluster
+- name: common-service-postgresql
+  resources:
+    - apiVersion: postgresql.k8s.enterprisedb.io/v1
+      data:
+        spec:
+          storage:
+            storageClass: placeholder
+          walStorage:
+            storageClass: placeholder
+      kind: Cluster
+      name: common-service-db
 `

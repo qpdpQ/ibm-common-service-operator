@@ -908,6 +908,7 @@ func (b *Bootstrap) DeleteV3Resources(mutatingWebhooks, validatingWebhooks []str
 
 	if err := b.deleteWebhookResources(); err != nil {
 		klog.Errorf("Error deleting webhook resources: %v", err)
+		klog.Infof("test")
 	}
 
 	if err := b.deleteSecretShareResources(); err != nil {

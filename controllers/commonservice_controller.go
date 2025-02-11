@@ -77,7 +77,7 @@ func (r *CommonServiceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return r.ReconcileNonConfigurableCR(ctx, instance)
 	}
 
-	if err := r.Bootstrap.Client.Get(ctx, req.NamespacedName, instance); err != nil {
+	if err := r.Reader.Get(ctx, req.NamespacedName, instance); err != nil {
 		if errors.IsNotFound(err) {
 			if err := r.handleDelete(ctx); err != nil {
 				return ctrl.Result{}, err
@@ -93,6 +93,53 @@ func (r *CommonServiceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if !instance.Spec.License.Accept {
 		klog.Error("Accept license by changing .spec.license.accept to true in the CommonService CR. Operator will not proceed until then")
+	}
+
+	if os.Getenv("NO_OLM") == "true" {
+		klog.Infof("Reconciling CommonService: %s in non OLM environment", req.NamespacedName)
+
+		// create ibm-cpp-config configmap
+		if err := configurationcollector.CreateUpdateConfig(r.Bootstrap); err != nil {
+			klog.Errorf("Fail to reconcile %s/%s: %v", instance.Namespace, instance.Name, err)
+			return ctrl.Result{}, err
+		}
+
+		// deploy Cert Manager CR
+		if err := r.Bootstrap.DeployCertManagerCR(); err != nil {
+			klog.Errorf("Fail to reconcile %s/%s: %v", instance.Namespace, instance.Name, err)
+			return ctrl.Result{}, err
+		}
+
+		klog.Infof("Start to Create ODLM CR in the namespace %s", r.Bootstrap.CSData.OperatorNs)
+		// Check if ODLM OperandRegistry and OperandConfig are created
+		klog.Info("Checking if OperandRegistry and OperandConfig CRD already exist")
+		existOpreg, _ := r.Bootstrap.CheckCRD(constant.OpregAPIGroupVersion, constant.OpregKind)
+		existOpcon, _ := r.Bootstrap.CheckCRD(constant.OpregAPIGroupVersion, constant.OpconKind)
+		// Install/update Opreg and Opcon resources before installing ODLM if CRDs exist
+		if existOpreg && existOpcon {
+			klog.Info("Installing/Updating OperandRegistry")
+			if err := r.Bootstrap.InstallOrUpdateOpreg(true, ""); err != nil {
+				klog.Errorf("Fail to Installing/Updating OperandConfig: %v", err)
+				return ctrl.Result{}, err
+			}
+
+			klog.Info("Installing/Updating OperandConfig")
+			if err := r.Bootstrap.InstallOrUpdateOpcon(true); err != nil {
+				klog.Errorf("Fail to Installing/Updating OperandConfig: %v", err)
+				return ctrl.Result{}, err
+			}
+
+			// Temporary solution for EDB image ConfigMap reference
+			klog.Infof("It is a non-OLM mode, skip creating EDB Image ConfigMap...")
+			// if err := r.Bootstrap.CreateEDBImageMaps(); err != nil {
+			// 	klog.Errorf("Failed to create EDB Image ConfigMap: %v", err)
+			// 	return ctrl.Result{}, err
+			// }
+		} else {
+			klog.Error("ODLM CRD not ready, waiting for it to be ready")
+		}
+
+		return ctrl.Result{}, nil
 	}
 
 	// If the CommonService CR is not paused, continue to reconcile

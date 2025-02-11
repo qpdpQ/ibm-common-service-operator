@@ -78,9 +78,9 @@ const Large = `
         instances: 2
         resources:
           limits:
-            cpu: 2250m
-            memory: 4608Mi
-            ephemeral-storage: 1536Mi
+            cpu: 1500m
+            memory: 3072Mi
+            ephemeral-storage: 1024Mi
           requests:
             ephemeral-storage: 500Mi
             cpu: 384m
@@ -913,6 +913,15 @@ const Large = `
     data:
       spec:
         instances: 3
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+            ephemeral-storage: 512Mi
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+            ephemeral-storage: 256Mi
         unsupported:
           podTemplate:
             spec:

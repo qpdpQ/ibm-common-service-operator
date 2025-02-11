@@ -24,6 +24,7 @@ import (
 	olmv1 "github.com/operator-framework/api/pkg/operators/v1"
 	olmv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	operatorsv1 "github.com/operator-framework/operator-lifecycle-manager/pkg/package-server/apis/operators/v1"
+	admv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -66,6 +67,7 @@ func init() {
 	utilruntime.Must(nssv1.AddToScheme(scheme))
 	utilruntime.Must(ssv1.AddToScheme(scheme))
 	utilruntime.Must(operatorv3.AddToScheme(scheme))
+	utilruntime.Must(admv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 
 	utilruntime.Must(olmv1alpha1.AddToScheme(scheme))
@@ -141,63 +143,130 @@ func main() {
 	// this Common Service Operator is not in the operatorNamespace(cpfsNs) under this tenant, and goes dormant.
 	if operatorNs == cpfsNs {
 
-		// New bootstrap Object
-		bs, err := bootstrap.NewBootstrap(mgr)
-		if err != nil {
-			klog.Errorf("Bootstrap failed: %v", err)
-			os.Exit(1)
-		}
-
-		if err := bs.CleanupWebhookResources(); err != nil {
-			klog.Errorf("Cleanup Webhook Resources failed: %v", err)
-			os.Exit(1)
-		}
-		// Update CS CR Status
-		go goroutines.UpdateCsCrStatus(bs)
-		// Create CS CR
-		go goroutines.WaitToCreateCsCR(bs)
-		// Delete Keycloak Cert
-		go goroutines.CleanupResources(bs)
-
-		if err = (&controllers.CommonServiceReconciler{
-			Bootstrap: bs,
-			Scheme:    mgr.GetScheme(),
-			Recorder:  mgr.GetEventRecorderFor("commonservice-controller"),
-		}).SetupWithManager(mgr); err != nil {
-			klog.Errorf("Unable to create controller CommonService: %v", err)
-			os.Exit(1)
-		}
-
-		// check if cert-manager CRD does not exist, then skip cert-manager related controllers initialization
-		exist, err := bs.CheckCRD(constant.CertManagerAPIGroupVersionV1, "Certificate")
-		if err != nil {
-			klog.Errorf("Failed to check if cert-manager CRD exists: %v", err)
-			os.Exit(1)
-		}
-		if !exist && err == nil {
-			klog.Infof("cert-manager CRD does not exist, skip cert-manager related controllers initialization")
-		} else if exist && err == nil {
-
-			if err = (&certmanagerv1controllers.CertificateRefreshReconciler{
-				Client: mgr.GetClient(),
-				Scheme: mgr.GetScheme(),
-			}).SetupWithManager(mgr); err != nil {
-				klog.Error(err, "unable to create controller", "controller", "CertificateRefresh")
+		// Bootstrap for non-olm deploy
+		if os.Getenv("NO_OLM") == "true" {
+			bs, err := bootstrap.NewNonOLMBootstrap(mgr)
+			if err != nil {
+				klog.Errorf("Bootstrap failed: %v", err)
 				os.Exit(1)
 			}
-			if err = (&certmanagerv1controllers.PodRefreshReconciler{
-				Client: mgr.GetClient(),
-				Scheme: mgr.GetScheme(),
-			}).SetupWithManager(mgr); err != nil {
-				klog.Error(err, "unable to create controller", "controller", "PodRefresh")
+
+			if err := bs.CleanupWebhookResources(); err != nil {
+				klog.Errorf("Cleanup Webhook Resources failed: %v", err)
 				os.Exit(1)
 			}
-			if err = (&certmanagerv1controllers.V1AddLabelReconciler{
-				Client: mgr.GetClient(),
-				Scheme: mgr.GetScheme(),
+
+			klog.Infof("Setup commonservice manager")
+			if err = (&controllers.CommonServiceReconciler{
+				Bootstrap: bs,
+				Scheme:    mgr.GetScheme(),
+				Recorder:  mgr.GetEventRecorderFor("commonservice-controller"),
 			}).SetupWithManager(mgr); err != nil {
-				klog.Error(err, "unable to create controller", "controller", "V1AddLabel")
+				klog.Errorf("Unable to create controller CommonService: %v", err)
 				os.Exit(1)
+			}
+
+			klog.Infof("Start go routines")
+			// Create CS CR
+			go goroutines.WaitToCreateCsCR(bs)
+			// Delete Keycloak Cert
+			go goroutines.CleanupResources(bs)
+
+			// check if cert-manager CRD does not exist, then skip cert-manager related controllers initialization
+			exist, err := bs.CheckCRD(constant.CertManagerAPIGroupVersionV1, "Certificate")
+			if err != nil {
+				klog.Errorf("Failed to check if cert-manager CRD exists: %v", err)
+				os.Exit(1)
+			}
+			if !exist && err == nil {
+				klog.Infof("cert-manager CRD does not exist, skip cert-manager related controllers initialization")
+			} else if exist && err == nil {
+
+				if err = (&certmanagerv1controllers.CertificateRefreshReconciler{
+					Client: mgr.GetClient(),
+					Scheme: mgr.GetScheme(),
+				}).SetupWithManager(mgr); err != nil {
+					klog.Error(err, "unable to create controller", "controller", "CertificateRefresh")
+					os.Exit(1)
+				}
+				if err = (&certmanagerv1controllers.PodRefreshReconciler{
+					Client: mgr.GetClient(),
+					Scheme: mgr.GetScheme(),
+				}).SetupWithManager(mgr); err != nil {
+					klog.Error(err, "unable to create controller", "controller", "PodRefresh")
+					os.Exit(1)
+				}
+				if err = (&certmanagerv1controllers.V1AddLabelReconciler{
+					Client: mgr.GetClient(),
+					Scheme: mgr.GetScheme(),
+				}).SetupWithManager(mgr); err != nil {
+					klog.Error(err, "unable to create controller", "controller", "V1AddLabel")
+					os.Exit(1)
+				}
+			}
+		} else {
+
+			// New bootstrap Object
+			bs, err := bootstrap.NewBootstrap(mgr)
+			if err != nil {
+				klog.Errorf("Bootstrap failed: %v", err)
+				os.Exit(1)
+			}
+
+			if err := bs.CleanupWebhookResources(); err != nil {
+				klog.Errorf("Cleanup Webhook Resources failed: %v", err)
+				os.Exit(1)
+			}
+
+			klog.Infof("Setup commonservice manager")
+			if err = (&controllers.CommonServiceReconciler{
+				Bootstrap: bs,
+				Scheme:    mgr.GetScheme(),
+				Recorder:  mgr.GetEventRecorderFor("commonservice-controller"),
+			}).SetupWithManager(mgr); err != nil {
+				klog.Errorf("Unable to create controller CommonService: %v", err)
+				os.Exit(1)
+			}
+
+			klog.Infof("Start go routines")
+			// Update CS CR Status
+			go goroutines.UpdateCsCrStatus(bs)
+			// Create CS CR
+			go goroutines.WaitToCreateCsCR(bs)
+			// Delete Keycloak Cert
+			go goroutines.CleanupResources(bs)
+
+			// check if cert-manager CRD does not exist, then skip cert-manager related controllers initialization
+			exist, err := bs.CheckCRD(constant.CertManagerAPIGroupVersionV1, "Certificate")
+			if err != nil {
+				klog.Errorf("Failed to check if cert-manager CRD exists: %v", err)
+				os.Exit(1)
+			}
+			if !exist && err == nil {
+				klog.Infof("cert-manager CRD does not exist, skip cert-manager related controllers initialization")
+			} else if exist && err == nil {
+
+				if err = (&certmanagerv1controllers.CertificateRefreshReconciler{
+					Client: mgr.GetClient(),
+					Scheme: mgr.GetScheme(),
+				}).SetupWithManager(mgr); err != nil {
+					klog.Error(err, "unable to create controller", "controller", "CertificateRefresh")
+					os.Exit(1)
+				}
+				if err = (&certmanagerv1controllers.PodRefreshReconciler{
+					Client: mgr.GetClient(),
+					Scheme: mgr.GetScheme(),
+				}).SetupWithManager(mgr); err != nil {
+					klog.Error(err, "unable to create controller", "controller", "PodRefresh")
+					os.Exit(1)
+				}
+				if err = (&certmanagerv1controllers.V1AddLabelReconciler{
+					Client: mgr.GetClient(),
+					Scheme: mgr.GetScheme(),
+				}).SetupWithManager(mgr); err != nil {
+					klog.Error(err, "unable to create controller", "controller", "V1AddLabel")
+					os.Exit(1)
+				}
 			}
 		}
 	} else {

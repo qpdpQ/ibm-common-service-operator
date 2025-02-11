@@ -144,6 +144,12 @@ spec:
     packageName: ibm-iam-operator
     scope: public
     installPlanApproval: {{ .ApprovalMode }}
+  - name: ibm-im-operator-v4.10
+    namespace: "{{ .CPFSNs }}"
+    channel: v4.9
+    packageName: ibm-iam-operator
+    scope: public
+    installPlanApproval: {{ .ApprovalMode }}
 `
 
 	IdpConfigUIOpReg = `
@@ -199,6 +205,12 @@ spec:
   - name: ibm-idp-config-ui-operator-v4.6
     namespace: "{{ .CPFSNs }}"
     channel: v4.6
+    packageName: ibm-commonui-operator-app
+    scope: public
+    installPlanApproval: {{ .ApprovalMode }}
+  - name: ibm-idp-config-ui-operator-v4.7
+    namespace: "{{ .CPFSNs }}"
+    channel: v4.7
     packageName: ibm-commonui-operator-app
     scope: public
     installPlanApproval: {{ .ApprovalMode }}
@@ -464,6 +476,13 @@ spec:
           onPremMultipleDeploy: {{ .OnPremMultiEnable }}
       operandBindInfo: 
         operand: ibm-im-operator
+  - name: ibm-im-operator-v4.10
+    spec:
+      authentication:
+        config:
+          onPremMultipleDeploy: {{ .OnPremMultiEnable }}
+      operandBindInfo: 
+        operand: ibm-im-operator
 `
 
 	UserMgmtOpCon = `
@@ -572,21 +591,69 @@ metadata:
 spec:
   services:
   - name: ibm-platformui-operator-v4.0
+    resources:
+      - apiVersion: apps/v1
+        force: true
+        kind: Deployment
+        labels:
+          operator.ibm.com/opreq-control: 'true'
+        name: meta-api-deploy
+        namespace: "{{ .CPFSNs }}"
     spec:
       operandBindInfo: {}
   - name: ibm-platformui-operator-v4.1
+    resources:
+      - apiVersion: apps/v1
+        force: true
+        kind: Deployment
+        labels:
+          operator.ibm.com/opreq-control: 'true'
+        name: meta-api-deploy
+        namespace: "{{ .CPFSNs }}"
     spec:
       operandBindInfo: {}
   - name: ibm-platformui-operator-v4.2
+    resources:
+      - apiVersion: apps/v1
+        force: true
+        kind: Deployment
+        labels:
+          operator.ibm.com/opreq-control: 'true'
+        name: meta-api-deploy
+        namespace: "{{ .CPFSNs }}"
     spec:
       operandBindInfo: {}
   - name: ibm-platformui-operator-v4.3
+    resources:
+      - apiVersion: apps/v1
+        force: true
+        kind: Deployment
+        labels:
+          operator.ibm.com/opreq-control: 'true'
+        name: meta-api-deploy
+        namespace: "{{ .CPFSNs }}"
     spec:
       operandBindInfo: {}
   - name: ibm-platformui-operator-v4.4
+    resources:
+      - apiVersion: apps/v1
+        force: true
+        kind: Deployment
+        labels:
+          operator.ibm.com/opreq-control: 'true'
+        name: meta-api-deploy
+        namespace: "{{ .CPFSNs }}"
     spec:
       operandBindInfo: {}
   - name: ibm-platformui-operator-v6.0
+    resources:
+      - apiVersion: apps/v1
+        force: true
+        kind: Deployment
+        labels:
+          operator.ibm.com/opreq-control: 'true'
+        name: meta-api-deploy
+        namespace: "{{ .CPFSNs }}"
     spec:
       operandBindInfo: {}
   - name: ibm-platformui-operator-v6.1
@@ -875,9 +942,12 @@ spec:
       - apiVersion: k8s.keycloak.org/v2alpha1
         data:
           spec:
+            proxy:
+              headers: xforwarded
             features:
               enabled:
                 - token-exchange
+                - admin-fine-grained-authz
             db:
               host: keycloak-edb-cluster-rw
               passwordSecret:
@@ -962,6 +1032,25 @@ spec:
         force: true
         kind: Keycloak
         name: cs-keycloak
+        optionalFields:
+          - path: .spec.unsupported.podTemplate.spec.containers[0].resources
+            operation: remove
+            matchExpressions:
+              - objectRef:
+                  name: keycloaks.k8s.keycloak.org
+                  apiVersion: apiextensions.k8s.io/v1
+                  kind: CustomResourceDefinition
+                key: .spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.resources
+                operator: Exists
+          - path: .spec.resources
+            operation: remove
+            matchExpressions:
+              - objectRef:
+                  name: keycloaks.k8s.keycloak.org
+                  apiVersion: apiextensions.k8s.io/v1
+                  kind: CustomResourceDefinition
+                key: .spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.resources
+                operator: DoesNotExist
       - apiVersion: v1
         kind: ConfigMap
         force: true
@@ -1065,6 +1154,8 @@ spec:
         force: true
         name: create-postgres-license-config
         namespace: "{{ .OperatorNs }}"
+        labels:
+          operator.ibm.com/opreq-control: 'true'
         data:
           spec:
             activeDeadlineSeconds: 600
@@ -1398,8 +1489,6 @@ spec:
         name: common-service-db          
         force: true
         annotations:
-          k8s.enterprisedb.io/addons: '["velero"]'
-          k8s.enterprisedb.io/snapshotAllowColdBackupOnPrimary: enabled
           productID: 068a62892a1e4db39641342e592daa25
           productMetric: FREE
           productName: IBM Cloud Platform Common Services
@@ -1721,7 +1810,7 @@ spec:
     installPlanApproval: {{ .ApprovalMode }}
   - name: ibm-im-operator
     namespace: "{{ .CPFSNs }}"
-    channel: v4.9
+    channel: v4.10
     packageName: ibm-iam-operator
     scope: public
     installPlanApproval: {{ .ApprovalMode }}
@@ -1737,6 +1826,12 @@ spec:
     packageName: ibm-events-operator
     scope: public
     installPlanApproval: {{ .ApprovalMode }}
+  - channel: v5.1
+    name: ibm-events-operator-v5.1
+    namespace: "{{ .CPFSNs }}"
+    packageName: ibm-events-operator
+    scope: public
+    installPlanApproval: {{ .ApprovalMode }}
   - name: ibm-platformui-operator
     namespace: "{{ .CPFSNs }}"
     channel: v6.1
@@ -1745,7 +1840,7 @@ spec:
     installPlanApproval: {{ .ApprovalMode }}
   - name: ibm-idp-config-ui-operator
     namespace: "{{ .CPFSNs }}"
-    channel: v4.6
+    channel: v4.7
     packageName: ibm-commonui-operator-app
     scope: public
     installPlanApproval: {{ .ApprovalMode }}
@@ -1982,6 +2077,8 @@ spec:
         kind: Job
         name: create-postgres-license-config
         namespace: "{{ .OperatorNs }}"
+        labels:
+          operator.ibm.com/opreq-control: 'true'
         data:
           spec:
             activeDeadlineSeconds: 600
@@ -2122,6 +2219,8 @@ spec:
         kind: Job
         name: create-postgres-license-config
         namespace: "{{ .OperatorNs }}"
+        labels:
+          operator.ibm.com/opreq-control: 'true'
         data:
           spec:
             activeDeadlineSeconds: 600
@@ -2278,6 +2377,14 @@ spec:
               - name: ibm-im-operator
             registry: common-service
   - name: ibm-zen-operator
+    resources:
+      - apiVersion: apps/v1
+        force: true
+        kind: Deployment
+        labels:
+          operator.ibm.com/opreq-control: 'true'
+        name: meta-api-deploy
+        namespace: "{{ .ServicesNs }}"
     spec:
       operandBindInfo: {}
   - name: ibm-platformui-operator
@@ -2292,7 +2399,7 @@ metadata:
   name: operand-deployment-lifecycle-manager-app
   namespace: "{{ .CPFSNs }}"
 spec:
-  channel: v4.3
+  channel: v4.4
   installPlanApproval: {{ .ApprovalMode }}
   name: ibm-odlm
   source: {{ .CatalogSourceName }}

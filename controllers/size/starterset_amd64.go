@@ -78,9 +78,9 @@ const StarterSet = `
         instances: 1
         resources:
           limits:
-            cpu: 300m
-            memory: 768Mi
-            ephemeral-storage: 768Mi
+            cpu: 200m
+            memory: 512Mi
+            ephemeral-storage: 512Mi
           requests:
             ephemeral-storage: 128Mi
             cpu: 75m
@@ -897,7 +897,7 @@ const StarterSet = `
     name: keycloak-edb-cluster
     data:
       spec:
-        instances: 1
+        instances: 2
         resources:
           limits:
             cpu: 200m
@@ -913,6 +913,15 @@ const StarterSet = `
     data:
       spec:
         instances: 1
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+            ephemeral-storage: 512Mi
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+            ephemeral-storage: 256Mi
         unsupported:
           podTemplate:
             spec:

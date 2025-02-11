@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -28,7 +29,11 @@ import (
 
 	utilyaml "github.com/ghodss/yaml"
 	olmv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	"golang.org/x/mod/semver"
+	admv1 "k8s.io/api/admissionregistration/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -51,6 +56,7 @@ import (
 	"github.com/IBM/ibm-common-service-operator/v4/controllers/constant"
 	"github.com/IBM/ibm-common-service-operator/v4/controllers/deploy"
 	nssv1 "github.com/IBM/ibm-namespace-scope-operator/v4/api/v1"
+	ssv1 "github.com/IBM/ibm-secretshare-operator/api/v1"
 	odlm "github.com/IBM/operand-deployment-lifecycle-manager/v4/api/v1alpha1"
 
 	certmanagerv1 "github.com/ibm/ibm-cert-manager-operator/apis/cert-manager/v1"
@@ -90,6 +96,39 @@ type Resource struct {
 	Group   string
 	Kind    string
 	Scope   string
+}
+
+func NewNonOLMBootstrap(mgr manager.Manager) (bs *Bootstrap, err error) {
+	cpfsNs := util.GetCPFSNamespace(mgr.GetAPIReader())
+	servicesNs := util.GetServicesNamespace(mgr.GetAPIReader())
+	operatorNs, err := util.GetOperatorNamespace()
+	if err != nil {
+		return
+	}
+	csData := apiv3.CSData{
+		CPFSNs:                  cpfsNs,
+		ServicesNs:              servicesNs,
+		OperatorNs:              operatorNs,
+		CatalogSourceName:       "",
+		CatalogSourceNs:         "",
+		ApprovalMode:            "",
+		WatchNamespaces:         util.GetWatchNamespace(),
+		OnPremMultiEnable:       strconv.FormatBool(util.CheckMultiInstances(mgr.GetAPIReader())),
+		ExcludedCatalog:         constant.ExcludedCatalog,
+		StatusMonitoredServices: constant.StatusMonitoredServices,
+	}
+
+	bs = &Bootstrap{
+		Client:               mgr.GetClient(),
+		Reader:               mgr.GetAPIReader(),
+		Config:               mgr.GetConfig(),
+		EventRecorder:        mgr.GetEventRecorderFor("ibm-common-service-operator"),
+		Manager:              deploy.NewDeployManager(mgr),
+		SaasEnable:           util.CheckSaas(mgr.GetAPIReader()),
+		MultiInstancesEnable: util.CheckMultiInstances(mgr.GetAPIReader()),
+		CSData:               csData,
+	}
+	return
 }
 
 // NewBootstrap is the way to create a NewBootstrap struct
@@ -185,14 +224,24 @@ func (b *Bootstrap) InitResources(instance *apiv3.CommonService, forceUpdateODLM
 	}
 
 	// Temporary solution for EDB image ConfigMap reference
-	if err := b.CreateEDBImageMaps(); err != nil {
-		klog.Errorf("Failed to create EDB Image ConfigMap: %v", err)
-		return err
+	if os.Getenv("NO_OLM") != "true" {
+		klog.Infof("It is not a non-OLM mode, create EDB Image ConfigMap")
+		if err := b.CreateEDBImageMaps(); err != nil {
+			klog.Errorf("Failed to create EDB Image ConfigMap: %v", err)
+			return err
+		}
 	}
 
 	// Create Keycloak themes ConfigMap
 	if err := b.CreateKeycloakThemesConfigMap(); err != nil {
 		klog.Errorf("Failed to create Keycloak Themes ConfigMap: %v", err)
+		return err
+	}
+
+	mutatingWebhooks := []string{constant.CSWebhookConfig, constant.OperanReqConfig}
+	validatingWebhooks := []string{constant.CSMappingConfig}
+	if err := b.DeleteV3Resources(mutatingWebhooks, validatingWebhooks); err != nil {
+		klog.Errorf("Failed to delete v3 resources: %v", err)
 		return err
 	}
 
@@ -240,6 +289,13 @@ func (b *Bootstrap) InitResources(instance *apiv3.CommonService, forceUpdateODLM
 		return err
 	}
 
+	klog.Info("Waiting for ODLM Operator to be ready")
+	if isWaiting, err := b.waitOperatorCSV(constant.IBMODLMPackage, "ibm-odlm", b.CSData.CPFSNs); err != nil {
+		return err
+	} else if isWaiting {
+		forceUpdateODLMCRs = true
+	}
+
 	// wait ODLM OperandRegistry and OperandConfig CRD
 	if err := b.waitResourceReady(constant.OpregAPIGroupVersion, constant.OpregKind); err != nil {
 		return err
@@ -248,7 +304,7 @@ func (b *Bootstrap) InitResources(instance *apiv3.CommonService, forceUpdateODLM
 		return err
 	}
 	// Reinstall/update OperandRegistry and OperandConfig if not installed/updated in the previous step
-	if !existOpreg || !existOpcon {
+	if !existOpreg || !existOpcon || forceUpdateODLMCRs {
 
 		// Set "Pending" condition when creating OperandRegistry and OperandConfig
 		instance.SetPendingCondition(constant.MasterCR, apiv3.ConditionTypePending, corev1.ConditionTrue, apiv3.ConditionReasonInit, apiv3.ConditionMessageInit)
@@ -564,7 +620,7 @@ func (b *Bootstrap) ListOperandConfig(ctx context.Context, opts ...client.ListOp
 func (b *Bootstrap) ListOperatorConfig(ctx context.Context, opts ...client.ListOption) *odlm.OperatorConfigList {
 	operatorConfigList := &odlm.OperatorConfigList{}
 	if err := b.Client.List(ctx, operatorConfigList, opts...); err != nil {
-		klog.Errorf("failed to List OperandConfig: %v", err)
+		klog.Errorf("failed to List OperatorConfig: %v", err)
 		return nil
 	}
 
@@ -831,6 +887,124 @@ func (b *Bootstrap) CreateKeycloakThemesConfigMap() error {
 	if err := b.renderTemplate(cmRes, b.CSData, false); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (b *Bootstrap) DeleteV3Resources(mutatingWebhooks, validatingWebhooks []string) error {
+
+	// Delete the list of MutatingWebhookConfigurations
+	for _, webhook := range mutatingWebhooks {
+		if err := b.deleteResource(&admv1.MutatingWebhookConfiguration{}, webhook, "", "MutatingWebhookConfiguration"); err != nil {
+			return err
+		}
+	}
+
+	// Delete the list of ValidatingWebhookConfiguration
+	for _, webhook := range validatingWebhooks {
+		if err := b.deleteResource(&admv1.ValidatingWebhookConfiguration{}, webhook, "", "ValidatingWebhookConfiguration"); err != nil {
+			return err
+		}
+	}
+
+	if err := b.deleteWebhookResources(); err != nil {
+		klog.Errorf("Error deleting webhook resources: %v", err)
+	}
+
+	if err := b.deleteSecretShareResources(); err != nil {
+		klog.Errorf("Error deleting secretshare resources: %v", err)
+	}
+	return nil
+}
+
+// deleteWebhookResources deletes resources related to ibm-common-service-webhook
+func (b *Bootstrap) deleteWebhookResources() error {
+	// Delete PodPreset (CR)
+	if err := b.deleteResource(&unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "operator.ibm.com/v1alpha1",
+			"kind":       "PodPreset",
+		},
+	}, constant.WebhookServiceName, b.CSData.ServicesNs, "PodPreset"); err != nil {
+		return err
+	}
+
+	// Delete ServiceAccount
+	if err := b.deleteResource(&corev1.ServiceAccount{}, constant.WebhookServiceName, b.CSData.ServicesNs, "ServiceAccount"); err != nil {
+		return err
+	}
+
+	// Delete Roles and RoleBindings
+	if err := b.deleteResource(&rbacv1.Role{}, constant.WebhookServiceName, b.CSData.ServicesNs, "Role"); err != nil {
+		return err
+	}
+
+	if err := b.deleteResource(&rbacv1.RoleBinding{}, constant.WebhookServiceName, b.CSData.ServicesNs, "RoleBinding"); err != nil {
+		return err
+	}
+
+	if err := b.deleteResource(&rbacv1.ClusterRole{}, constant.WebhookServiceName, "", "ClusterRole"); err != nil {
+		return err
+	}
+
+	if err := b.deleteResource(&rbacv1.ClusterRoleBinding{}, "ibm-common-service-webhook-"+b.CSData.ServicesNs, "", "ClusterRoleBinding"); err != nil {
+		return err
+	}
+
+	// Delete Deployment
+	if err := b.deleteResource(&appsv1.Deployment{}, constant.WebhookServiceName, b.CSData.ServicesNs, "Deployment"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// deleteSecretShareResources deletes resources related to secretshare
+func (b *Bootstrap) deleteSecretShareResources() error {
+	if err := b.deleteResource(&corev1.ServiceAccount{}, constant.Secretshare, b.CSData.ServicesNs, "ServiceAccount"); err != nil {
+		return err
+	}
+
+	// Delete SecretShare ClusterRole and ClusterRoleBinding
+	if err := b.deleteResource(&rbacv1.ClusterRole{}, constant.Secretshare, "", "ClusterRole"); err != nil {
+		return err
+	}
+
+	if err := b.deleteResource(&rbacv1.ClusterRoleBinding{}, "secretshare-"+b.CSData.ServicesNs, "", "ClusterRoleBinding"); err != nil {
+		return err
+	}
+
+	// Delete SecretShare Operator CR
+	if err := b.deleteResource(&ssv1.SecretShare{}, constant.MasterCR, b.CSData.ServicesNs, "SecretShare Operator CR"); err != nil {
+		return err
+	}
+
+	// Delete SecretShare Operator Deployment
+	if err := b.deleteResource(&appsv1.Deployment{}, constant.Secretshare, b.CSData.ServicesNs, "Deployment"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *Bootstrap) deleteResource(resource client.Object, name, namespace string, resourceType string) error {
+	namespacedName := types.NamespacedName{Name: name}
+	if namespace != "" {
+		namespacedName.Namespace = namespace
+	}
+
+	if err := b.Reader.Get(ctx, namespacedName, resource); err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		klog.V(2).Infof("%s %s/%s not found, skipping deletion", resourceType, namespace, name)
+		return nil
+	}
+
+	if err := b.Client.Delete(ctx, resource); err != nil {
+		klog.Errorf("Failed to delete %s %s/%s: %v", resourceType, namespace, name, err)
+		return err
+	}
+
+	klog.Infof("Successfully deleted %s %s/%s", resourceType, namespace, name)
 	return nil
 }
 
@@ -1134,7 +1308,7 @@ func (b *Bootstrap) IsBYOCert() (bool, error) {
 		client.MatchingLabels(
 			map[string]string{"app.kubernetes.io/instance": "cs-ca-certificate"}),
 	}
-	if certerr := b.Reader.List(ctx, certList, opts...); err != nil {
+	if certerr := b.Reader.List(ctx, certList, opts...); certerr != nil {
 		return false, certerr
 	}
 
@@ -1280,15 +1454,15 @@ func (b *Bootstrap) CleanNamespaceScopeResources() error {
 	if isOpregAPI, err := b.CheckCRD(constant.OpregAPIGroupVersion, constant.OpregKind); err != nil {
 		klog.Errorf("Failed to check if %s CRD exists: %v", constant.OpregKind, err)
 		return err
-	} else if !isOpregAPI && err == nil {
+	} else if !isOpregAPI {
 		klog.Infof("%s CRD does not exist, skip checking no-op installMode", constant.OpregKind)
-	} else if isOpregAPI && err == nil {
+	} else if isOpregAPI {
 		// Get the common-service OperandRegistry
 		operandRegistry, err := b.GetOperandRegistry(ctx, constant.MasterCR, b.CSData.ServicesNs)
 		if err != nil {
 			klog.Errorf("Failed to get common-service OperandRegistry: %v", err)
 			return err
-		} else if err == nil && operandRegistry == nil {
+		} else if operandRegistry == nil {
 			klog.Infof("The common-service OperandRegistry is not found in the %s namespace, skip cleaning the NamespaceScope resources", b.CSData.ServicesNs)
 			return nil
 		}
@@ -1945,4 +2119,77 @@ func setEDBUserManaged(instance *apiv3.CommonService) {
 	if !isExist {
 		instance.Spec.OperatorConfigs = append(instance.Spec.OperatorConfigs, apiv3.OperatorConfig{Name: "internal-use-only-edb", UserManaged: true})
 	}
+}
+
+func (b *Bootstrap) waitOperatorCSV(subName, packageManifest, operatorNs string) (bool, error) {
+	var isWaiting bool
+	// Wait for the operator CSV to be installed
+	klog.Infof("Waiting for the operator CSV with packageManifest %s in namespace %s to be installed", packageManifest, operatorNs)
+	if err := utilwait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
+		installed, err := b.checkOperatorCSV(subName, packageManifest, operatorNs)
+		if err != nil {
+			return false, err
+		} else if !installed {
+			klog.Infof("The operator CSV with packageManifest %s in namespace %s is not installed yet", packageManifest, operatorNs)
+			isWaiting = true
+		}
+		return installed, nil
+	}); err != nil {
+		return isWaiting, fmt.Errorf("failed to wait for the operator CSV to be installed: %v", err)
+	}
+	return isWaiting, nil
+}
+
+func (b *Bootstrap) checkOperatorCSV(subName, packageManifest, operatorNs string) (bool, error) {
+	// Get the subscription by name and namespace
+	sub := &olmv1alpha1.Subscription{}
+	if err := b.Reader.Get(context.TODO(), types.NamespacedName{Name: subName, Namespace: operatorNs}, sub); err != nil {
+		klog.Warningf("Failed to get Subscription %s in namespace %s: %v, list subscription by packageManifest and operatorNs", subName, operatorNs, err)
+		// List the subscription by packageManifest and operatorNs
+		// The subscription contain label "operators.coreos.com/<packageManifest>.<operatorNs>: ''"
+		subList := &olmv1alpha1.SubscriptionList{}
+		labelKey := util.GetFirstNCharacter(packageManifest+"."+operatorNs, 63)
+		if err := b.Reader.List(context.TODO(), subList, &client.ListOptions{
+			LabelSelector: labels.SelectorFromSet(labels.Set{
+				"operators.coreos.com/" + labelKey: "",
+			}),
+			Namespace: operatorNs,
+		}); err != nil {
+			klog.Errorf("Failed to list Subscription by packageManifest %s and operatorNs %s: %v", packageManifest, operatorNs, err)
+			return false, err
+		}
+
+		// Check if multiple subscriptions exist
+		if len(subList.Items) > 1 {
+			return false, fmt.Errorf("multiple subscriptions found by packageManifest %s and operatorNs %s", packageManifest, operatorNs)
+		} else if len(subList.Items) == 0 {
+			return false, fmt.Errorf("no subscription found by packageManifest %s and operatorNs %s", packageManifest, operatorNs)
+		}
+		sub = &subList.Items[0]
+	}
+
+	// Get the channel in the subscription .spec.channel, and check if it is semver
+	channel := sub.Spec.Channel
+	if !semver.IsValid(channel) {
+		klog.Warningf("channel %s is not a semver for operator with packageManifest %s and operatorNs %s", channel, packageManifest, operatorNs)
+		return false, nil
+	}
+
+	// Get the CSV from subscription .status.installedCSV
+	installedCSV := sub.Status.InstalledCSV
+	var installedVersion string
+	if installedCSV != "" {
+		// installedVersion is the version after the first dot in installedCSV
+		// For example, version is v4.3.1 for operand-deployment-lifecycle-manager.v4.3.1
+		installedVersion = installedCSV[strings.IndexByte(installedCSV, '.')+1:]
+	}
+
+	// 0 if channel == installedVersion - v4.3 == v4.3.0
+	// -1 if channel < installedVersion - v4.3 < v4.3.1
+	// +1 if channel > installedVersion - v4.3 > v4.2.0
+	if semver.Compare(channel, installedVersion) > 0 {
+		return false, nil
+	}
+
+	return true, nil
 }

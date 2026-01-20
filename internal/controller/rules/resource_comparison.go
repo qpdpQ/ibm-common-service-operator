@@ -91,14 +91,31 @@ func ResourceComparison(resourceA, resourceB interface{}) (interface{}, interfac
 
 	switch resourceA.(type) {
 	case string:
-		large, small, err := resourceStringComparison(resourceA.(string), resourceB.(string))
+		// Handle case where resourceB might be numeric instead of string
+		strB, ok := resourceB.(string)
+		if !ok {
+			// Convert numeric resourceB to string for comparison
+			strB = fmt.Sprintf("%v", resourceB)
+		}
+		large, small, err := resourceStringComparison(resourceA.(string), strB)
 		if err != nil {
 			klog.Error(err)
 		}
 		return large, small
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		// Handle case where resourceB might be string instead of numeric
 		strA := fmt.Sprintf("%v", resourceA)
 		strB := fmt.Sprintf("%v", resourceB)
+
+		// Check if resourceB is a string with units (like "2000m")
+		if _, ok := resourceB.(string); ok {
+			// Use string comparison for resource quantities
+			large, small, err := resourceStringComparison(strA, strB)
+			if err != nil {
+				klog.Error(err)
+			}
+			return large, small
+		}
 
 		floatA, _ := strconv.ParseFloat(strA, 64)
 		floatB, _ := strconv.ParseFloat(strB, 64)

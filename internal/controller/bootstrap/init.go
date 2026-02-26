@@ -2756,6 +2756,125 @@ func (b *Bootstrap) UpdatePostgresClusterImage(ctx context.Context, instance *ap
 	return nil
 }
 
+// WaitForStorageClassPropagation waits for StorageClass to be propagated to the OperandConfig
+func (b *Bootstrap) WaitForStorageClassPropagation(ctx context.Context, instance *apiv3.CommonService) error {
+	// Check if StorageClass is specified in CommonService CR
+	if instance.Spec.StorageClass == "" {
+		klog.Infof("No StorageClass specified in CommonService CR, skipping StorageClass propagation check")
+		return nil
+	}
+
+	desiredStorageClass := instance.Spec.StorageClass
+	klog.Infof("Waiting for StorageClass '%s' to be propagated to OperandConfig", desiredStorageClass)
+
+	// Wait for the StorageClass to be propagated to the OperandConfig
+	if err := utilwait.PollUntilContextTimeout(ctx, time.Second*5, time.Minute*3, true, func(ctx context.Context) (done bool, err error) {
+		// Fetch the latest OperandConfig
+		opcon := util.NewUnstructured("operator.ibm.com", "OperandConfig", "v1alpha1")
+		opconKey := types.NamespacedName{
+			Name:      "common-service",
+			Namespace: b.CSData.ServicesNs,
+		}
+
+		err = b.Client.Get(ctx, opconKey, opcon)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				klog.V(2).Infof("OperandConfig %s not found yet in namespace %s, waiting for creation",
+					opconKey.Name, opconKey.Namespace)
+				return false, nil
+			}
+			return false, err
+		}
+
+		// Check if services field exists
+		services, found, err := unstructured.NestedSlice(opcon.Object, "spec", "services")
+		if err != nil {
+			return false, err
+		}
+		if !found {
+			klog.V(2).Infof("OperandConfig %s does not have spec.services field yet", opconKey.String())
+			return false, nil
+		}
+
+		// Check StorageClass in common-service-postgresql service
+		storageClassFound := false
+		for _, svc := range services {
+			service, ok := svc.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			serviceName, ok := service["name"].(string)
+			if !ok || serviceName != "common-service-postgresql" {
+				continue
+			}
+
+			// Check if resources field exists and contains the Cluster resource with StorageClass
+			resources, found, err := unstructured.NestedSlice(service, "resources")
+			if err != nil {
+				return false, err
+			}
+			if !found {
+				klog.V(2).Infof("Service common-service-postgresql does not have resources field yet")
+				continue
+			}
+
+			for _, res := range resources {
+				resource, ok := res.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				// Check if this is the Cluster resource
+				kind, _ := resource["kind"].(string)
+				name, _ := resource["name"].(string)
+				if kind != "Cluster" || name != "common-service-db" {
+					continue
+				}
+
+				// Check StorageClass in spec.storage.storageClass
+				storageClass, found, err := unstructured.NestedString(resource, "data", "spec", "storage", "storageClass")
+				if err != nil {
+					return false, err
+				}
+				if !found || storageClass != desiredStorageClass {
+					klog.V(2).Infof("StorageClass not yet set or incorrect in OperandConfig for common-service-db storage, expected '%s', got '%s'",
+						desiredStorageClass, storageClass)
+					return false, nil
+				}
+
+				// Check StorageClass in spec.walStorage.storageClass
+				walStorageClass, found, err := unstructured.NestedString(resource, "data", "spec", "walStorage", "storageClass")
+				if err != nil {
+					return false, err
+				}
+				if !found || walStorageClass != desiredStorageClass {
+					klog.V(2).Infof("StorageClass not yet set or incorrect in OperandConfig for common-service-db walStorage, expected '%s', got '%s'",
+						desiredStorageClass, walStorageClass)
+					return false, nil
+				}
+
+				storageClassFound = true
+				break
+			}
+			break
+		}
+
+		if !storageClassFound {
+			klog.V(2).Infof("StorageClass '%s' not yet propagated to OperandConfig for common-service-postgresql", desiredStorageClass)
+			return false, nil
+		}
+
+		klog.Infof("StorageClass '%s' successfully propagated to OperandConfig", desiredStorageClass)
+		return true, nil
+	}); err != nil {
+		return fmt.Errorf("timeout waiting for StorageClass '%s' to be propagated to OperandConfig: %v",
+			desiredStorageClass, err)
+	}
+
+	return nil
+}
+
 // getPostgresImageConfigMap gets the configmap containing PostgreSQL image information
 // It first tries to get the configmap deployed with Postgres Operator,
 // and if not found, it looks for the configmap created by CS operator

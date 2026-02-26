@@ -2,6 +2,7 @@
 cpfs:
   imageRegistryNamespaceOperator: cpopen
   imageRegistryNamespaceOperand: cpopen/cpfs
+  storageClass: nfs-storage
   labels:
   # CR configurations
   size: starterset
@@ -20,6 +21,6 @@ cpfs:
 global:
   imagePullPrefix: icr.io
   tetheredNamespaces: []
-  operatorNamespace: operator-ns
+  operatorNamespace: helm
   imagePullSecret: ibm-entitlement-key
-  instanceNamespace:
+  instanceNamespace: helm

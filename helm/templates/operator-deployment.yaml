@@ -38,7 +38,7 @@ metadata:
             "operatorNamespace": "{{ .Values.global.operatorNamespace }}",
             "servicesNamespace": "{{ .Values.global.instanceNamespace }}",
             "size": "{{ .Values.cpfs.size }}",
-            "storageClass": "{{ .Values.global.blockStorageClass }}"
+            "storageClass": "nfs-storage"
             {{- if not (.Values.cpfs.roksEnabled | default true) }},
             "services": [
               {
@@ -89,7 +89,7 @@ spec:
                       - s390x
       containers:         
         - name: ibm-common-service-operator
-          image: {{ .Values.cpfs.imagePullPrefix | default .Values.global.imagePullPrefix }}/{{ .Values.cpfs.imageRegistryNamespaceOperator}}/common-service-operator:4.18.0
+          image: {{ .Values.cpfs.imagePullPrefix | default .Values.global.imagePullPrefix }}/{{ .Values.cpfs.imageRegistryNamespaceOperator}}/common-service-operator:4.17.0
           command: 
             - /manager
           env:             

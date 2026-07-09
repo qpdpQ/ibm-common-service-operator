@@ -33,7 +33,17 @@ import (
 )
 
 func Buildconfig(config map[string]string, bs *bootstrap.Bootstrap) map[string]string {
-	builder := configbuilder{data: config, bs: bs}
+	// Preserve existing config data by creating a copy
+	if config == nil {
+		config = make(map[string]string)
+	}
+	// Create a new map to preserve existing values
+	preservedData := make(map[string]string)
+	for k, v := range config {
+		preservedData[k] = v
+	}
+
+	builder := configbuilder{data: preservedData, bs: bs}
 	updatedConfig := builder.setDefaultStorageClass().setKeycloakOperatorChannels()
 	return updatedConfig.data
 }

@@ -189,6 +189,14 @@ rules:
       - clusters/status
       - poolers/status
   - verbs:
+      - get
+      - watch
+      - list
+    apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+  - verbs:
       - create
       - get
       - list

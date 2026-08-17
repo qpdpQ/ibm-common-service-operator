@@ -2046,7 +2046,7 @@ spec:
               shm: 500Mi
               temporaryData: 500Mi
             primaryUpdateStrategy: unsupervised
-            primaryUpdateMethod: switchover
+            primaryUpdateMethod: restart
             enableSuperuserAccess: true
             replicationSlots:
               highAvailability:

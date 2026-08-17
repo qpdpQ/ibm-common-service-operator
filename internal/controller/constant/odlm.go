@@ -2985,7 +2985,9 @@ spec:
     sourceNamespace: "{{ .CatalogSourceNs }}"
   - name: ibm-platformui-operator
     namespace: "{{ .CPFSNs }}"
-    channel: v6.10
+    channel: v7.0
+    fallbackChannels:
+      - v6.10
     packageName: ibm-zen-operator
     scope: public
     installPlanApproval: {{ .ApprovalMode }}

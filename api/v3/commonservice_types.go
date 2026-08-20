@@ -139,6 +139,9 @@ type CommonServiceSpec struct {
 	// for pulling images. Defaults to "ibm-entitlement-key" if not specified.
 	// +optional
 	ImagePullSecret string `json:"imagePullSecret,omitempty"`
+	// Tolerations specifies pod tolerations to propagate to selected downstream operands.
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 	// CSPostgreSQLReplica configures common-service-db as a replica cluster
 	// When specified, enables streaming replication from primary cluster
 	// Storage, certificates, and other settings remain CS operator defaults

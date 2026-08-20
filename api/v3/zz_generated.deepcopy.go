@@ -21,7 +21,8 @@
 package v3
 
 import (
-	"github.ibm.com/ibm-pg/ibm-pg-types/pkg/api/v1"
+	v1 "github.ibm.com/ibm-pg/ibm-pg-types/pkg/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -234,6 +235,13 @@ func (in *CommonServiceSpec) DeepCopyInto(out *CommonServiceSpec) {
 		}
 	}
 	out.License = in.License
+	if in.Tolerations != nil {
+		in, out := &in.Tolerations, &out.Tolerations
+		*out = make([]corev1.Toleration, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.CSPostgreSQLReplica != nil {
 		in, out := &in.CSPostgreSQLReplica, &out.CSPostgreSQLReplica
 		*out = new(CSPostgreSQLReplicaConfig)

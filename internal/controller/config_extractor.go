@@ -24,6 +24,7 @@ import (
 	"strings"
 	"text/template"
 
+	utilyaml "github.com/ghodss/yaml"
 	"k8s.io/klog"
 
 	apiv3 "github.com/IBM/ibm-common-service-operator/v4/api/v3"
@@ -204,6 +205,24 @@ func extractFeatureConfigs(cs *apiv3.CommonService) ([]interface{}, error) {
 			}
 			configs = append(configs, labelConfig...)
 		}
+	}
+
+	// Extract tolerations configuration
+	if len(cs.Spec.Tolerations) > 0 {
+		klog.Info("Extracting tolerations configuration")
+		tolerationBytes, err := json.Marshal(cs.Spec.Tolerations)
+		if err != nil {
+			return nil, err
+		}
+		tolerationYAML, err := utilyaml.JSONToYAML(tolerationBytes)
+		if err != nil {
+			return nil, err
+		}
+		tolerationConfig, err := convertStringToSlice(strings.ReplaceAll(constant.ServiceTolerationsTemplate, "placeholder", strings.TrimSpace(string(tolerationYAML))))
+		if err != nil {
+			return nil, err
+		}
+		configs = append(configs, tolerationConfig...)
 	}
 
 	// Extract CSPostgreSQLReplica configuration

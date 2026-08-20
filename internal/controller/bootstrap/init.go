@@ -50,7 +50,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
-	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -71,6 +70,27 @@ import (
 var (
 	placeholder = "placeholder"
 )
+
+type ownerReferenceTarget struct {
+	Group string
+	Kind  string
+	Name  string
+}
+
+// commonServiceOwnerReferenceTargets is an explicit lifecycle allowlist.
+// Only resources in this list are garbage-collected with their CommonService.
+var commonServiceOwnerReferenceTargets = [...]ownerReferenceTarget{
+	{
+		Group: "",
+		Kind:  "ConfigMap",
+		Name:  constant.CSKeycloakThemeConfigMap,
+	},
+	{
+		Group: "cert-manager.io",
+		Kind:  "Certificate",
+		Name:  constant.CSCACertificate,
+	},
+}
 
 var ctx = context.Background()
 
@@ -590,36 +610,20 @@ func (b *Bootstrap) CreateResourcesFromAlmExamples() error {
 }
 
 // shouldAddOwnerReference determines if a resource should have an owner reference added
-func (b *Bootstrap) shouldAddOwnerReference(obj *unstructured.Unstructured, instance *apiv3.CommonService) bool {
+func (b *Bootstrap) shouldAddOwnerReference(
+	obj *unstructured.Unstructured,
+	instance *apiv3.CommonService,
+) bool {
 	if instance == nil {
 		return false
 	}
 
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	name := obj.GetName()
 
-	// ConfigMaps that need owner references
-	if gvk.Kind == "ConfigMap" && gvk.Version == "v1" && gvk.Group == "" {
-		configMapsNeedingOwner := []string{
-			"cs-keycloak-theme",
-		}
-		for _, cmName := range configMapsNeedingOwner {
-			if name == cmName {
-				return true
-			}
-		}
-	}
-
-	// Certificate resources that need owner references
-	if gvk.Kind == "Certificate" && gvk.Group == "cert-manager.io" {
-		if name == constant.CSCACertificate { // "cs-ca-certificate"
-			return true
-		}
-	}
-
-	// Secret resources that need owner references
-	if gvk.Kind == "Secret" && gvk.Version == "v1" && gvk.Group == "" {
-		if name == constant.CSCACertificateSecret {
+	for _, target := range commonServiceOwnerReferenceTargets {
+		if gvk.Group == target.Group &&
+			gvk.Kind == target.Kind &&
+			obj.GetName() == target.Name {
 			return true
 		}
 	}
@@ -627,46 +631,36 @@ func (b *Bootstrap) shouldAddOwnerReference(obj *unstructured.Unstructured, inst
 	return false
 }
 
-// addOwnerReference adds an owner reference to the object if appropriate
-func (b *Bootstrap) addOwnerReference(obj *unstructured.Unstructured, instance *apiv3.CommonService) error {
+// addOwnerReference ensures that obj is controlled by instance. It returns true
+// when the object was changed. The caller is responsible for persisting the
+// change and logging only after that persistence succeeds.
+func (b *Bootstrap) addOwnerReference(
+	obj *unstructured.Unstructured,
+	instance *apiv3.CommonService,
+) (bool, error) {
 	if !b.shouldAddOwnerReference(obj, instance) {
-		return nil
+		return false, nil
 	}
 
-	// Kubernetes does not allow cross-namespace owner references
+	// Kubernetes does not allow cross-namespace owner references.
 	if obj.GetNamespace() != "" && obj.GetNamespace() != instance.Namespace {
-		klog.V(2).Infof("Skipping cross-namespace owner ref for %s/%s (owner is in %s)",
-			obj.GetNamespace(), obj.GetName(), instance.Namespace)
-		return nil
+		klog.V(2).Infof(
+			"Skipping cross-namespace owner ref for %s/%s (owner is in %s)",
+			obj.GetNamespace(),
+			obj.GetName(),
+			instance.Namespace,
+		)
+		return false, nil
 	}
 
-	// Create owner reference
 	ownerRef := metav1.OwnerReference{
-		APIVersion:         constant.APIVersion,
-		Kind:               constant.KindCR,
-		Name:               instance.Name,
-		UID:                instance.UID,
-		Controller:         pointer.Bool(true),
-		BlockOwnerDeletion: pointer.Bool(true),
+		APIVersion: constant.APIVersion,
+		Kind:       constant.KindCR,
+		Name:       instance.Name,
+		UID:        instance.UID,
 	}
 
-	// Get existing owner references
-	existingOwnerRefs := obj.GetOwnerReferences()
-
-	// Check if owner reference already exists
-	for _, ref := range existingOwnerRefs {
-		if ref.UID == ownerRef.UID {
-			klog.V(2).Infof("Owner reference already exists for %s/%s", obj.GetNamespace(), obj.GetName())
-			return nil
-		}
-	}
-
-	// Add the new owner reference
-	existingOwnerRefs = append(existingOwnerRefs, ownerRef)
-	obj.SetOwnerReferences(existingOwnerRefs)
-
-	klog.Infof("Added owner reference to %s %s/%s", obj.GetKind(), obj.GetNamespace(), obj.GetName())
-	return nil
+	return common.EnsureControllerOwnerReference(obj, ownerRef)
 }
 
 func (b *Bootstrap) CreateOrUpdateFromYaml(yamlContent []byte, instance *apiv3.CommonService, alwaysUpdate ...bool) error {
@@ -680,9 +674,12 @@ func (b *Bootstrap) CreateOrUpdateFromYaml(yamlContent []byte, instance *apiv3.C
 	for _, obj := range objects {
 		gvk := obj.GetObjectKind().GroupVersionKind()
 
-		// Add owner reference if appropriate
-		if err := b.addOwnerReference(obj, instance); err != nil {
-			klog.Errorf("Failed to add owner reference to %s/%s: %v", obj.GetNamespace(), obj.GetName(), err)
+		// Add the owner reference to the desired object so newly created resources
+		// and normal content updates include it.
+		desiredOwnerReferenceChanged, err := b.addOwnerReference(obj, instance)
+		if err != nil {
+			errMsg = err
+			continue
 		}
 
 		objInCluster, err := b.GetObject(obj)
@@ -691,6 +688,8 @@ func (b *Bootstrap) CreateOrUpdateFromYaml(yamlContent []byte, instance *apiv3.C
 
 			if err := b.CreateObject(obj); err != nil {
 				errMsg = err
+			} else if desiredOwnerReferenceChanged {
+				klog.Infof("Added owner reference to %s %s/%s", obj.GetKind(), obj.GetNamespace(), obj.GetName())
 			}
 			continue
 		} else if err != nil {
@@ -707,7 +706,17 @@ func (b *Bootstrap) CreateOrUpdateFromYaml(yamlContent []byte, instance *apiv3.C
 		if len(alwaysUpdate) != 0 {
 			forceUpdate = alwaysUpdate[0]
 		}
-		update := forceUpdate
+
+		// Backfill ownership independently from the template version. An upgrade
+		// can introduce ownership metadata while leaving the resource's version
+		// annotation unchanged.
+		ownerReferenceChanged, err := b.addOwnerReference(objInCluster, instance)
+		if err != nil {
+			errMsg = err
+			continue
+		}
+
+		contentUpdate := forceUpdate
 
 		// do not compareVersion if the resource is subscription
 		if gvk.Kind == "Subscription" {
@@ -723,16 +732,17 @@ func (b *Bootstrap) CreateOrUpdateFromYaml(yamlContent []byte, instance *apiv3.C
 			if sub.Object["spec"].(map[string]interface{})["config"] != nil {
 				obj.Object["spec"].(map[string]interface{})["config"] = sub.Object["spec"].(map[string]interface{})["config"]
 			}
-			update = !equality.Semantic.DeepEqual(sub.Object["spec"], obj.Object["spec"])
+			contentUpdate = contentUpdate || !equality.Semantic.DeepEqual(sub.Object["spec"], obj.Object["spec"])
 		} else {
 			v1IsLarger, convertErr := util.CompareVersion(obj.GetAnnotations()["version"], objInCluster.GetAnnotations()["version"])
 			if convertErr != nil {
 				return convertErr
 			}
 			if v1IsLarger {
-				update = true
+				contentUpdate = true
 			}
 		}
+		update := contentUpdate || ownerReferenceChanged
 
 		if update {
 			klog.Infof("Updating resource with name: %s, namespace: %s, kind: %s, apiversion: %s/%s\n", obj.GetName(), obj.GetNamespace(), gvk.Kind, gvk.Group, gvk.Version)
@@ -740,8 +750,15 @@ func (b *Bootstrap) CreateOrUpdateFromYaml(yamlContent []byte, instance *apiv3.C
 			resourceVersion := objInCluster.GetResourceVersion()
 			obj.SetResourceVersion(resourceVersion)
 
-			// Special handling for cs-ca-certificate: only update annotations and spec
-			if gvk.Kind == "Certificate" && obj.GetName() == constant.CSCACertificate {
+			var updateErr error
+
+			if ownerReferenceChanged && !contentUpdate {
+				// Persist a metadata-only ownership change without replacing fields
+				// managed by another controller or generated at runtime.
+				updateErr = b.UpdateObject(objInCluster)
+			} else if gvk.Kind == "Certificate" && obj.GetName() == constant.CSCACertificate {
+				// Special handling for cs-ca-certificate content changes: only update
+				// annotations and spec.
 				// Preserve existing object and only update annotations and spec
 				if newAnnotations := obj.GetAnnotations(); newAnnotations != nil {
 					objInCluster.SetAnnotations(newAnnotations)
@@ -749,19 +766,20 @@ func (b *Bootstrap) CreateOrUpdateFromYaml(yamlContent []byte, instance *apiv3.C
 				if newSpec, found := obj.Object["spec"]; found {
 					objInCluster.Object["spec"] = newSpec
 				}
-				// Ensure owner reference is set on update
-				if b.shouldAddOwnerReference(objInCluster, instance) {
-					if err := b.addOwnerReference(objInCluster, instance); err != nil {
-						klog.Errorf("Failed to add owner reference during update to %s/%s: %v", objInCluster.GetNamespace(), objInCluster.GetName(), err)
-					}
-				}
-				if err := b.UpdateObject(objInCluster); err != nil {
-					errMsg = err
-				}
+				updateErr = b.UpdateObject(objInCluster)
 			} else {
-				if err := b.UpdateObject(obj); err != nil {
-					errMsg = err
+				if b.shouldAddOwnerReference(obj, instance) {
+					// Preserve unrelated non-controller owner references during a
+					// normal content update.
+					obj.SetOwnerReferences(objInCluster.GetOwnerReferences())
 				}
+				updateErr = b.UpdateObject(obj)
+			}
+
+			if updateErr != nil {
+				errMsg = updateErr
+			} else if ownerReferenceChanged {
+				klog.Infof("Added owner reference to %s %s/%s", obj.GetKind(), obj.GetNamespace(), obj.GetName())
 			}
 		}
 	}

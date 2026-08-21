@@ -190,5 +190,3 @@ const ServiceTolerationsTemplate = `
         spec:
           tolerations: placeholder
 `
-
-// Made with Bob

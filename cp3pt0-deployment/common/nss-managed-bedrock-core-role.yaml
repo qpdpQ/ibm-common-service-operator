@@ -1498,6 +1498,14 @@ rules:
       - clusters
       - clusters/status
   - verbs:
+      - get
+      - watch
+      - list
+    apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+  - verbs:
       - create
       - delete
       - get

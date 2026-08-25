@@ -17,22 +17,6 @@
 package constant
 
 const ServiceTolerationsTemplate = `
-- name: ibm-im-mongodb-operator
-  spec:
-    mongoDB:
-      tolerations: placeholder
-- name: ibm-im-mongodb-operator-v4.0
-  spec:
-    mongoDB:
-      tolerations: placeholder
-- name: ibm-im-mongodb-operator-v4.1
-  spec:
-    mongoDB:
-      tolerations: placeholder
-- name: ibm-im-mongodb-operator-v4.2
-  spec:
-    mongoDB:
-      tolerations: placeholder
 - name: ibm-im-operator
   spec:
     authentication:

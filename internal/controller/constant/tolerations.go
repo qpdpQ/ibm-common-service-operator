@@ -188,5 +188,6 @@ const ServiceTolerationsTemplate = `
       name: common-service-db
       data:
         spec:
-          tolerations: placeholder
+          affinity:
+            tolerations: placeholder
 `

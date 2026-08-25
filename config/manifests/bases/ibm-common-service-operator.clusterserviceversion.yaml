@@ -194,7 +194,7 @@ spec:
      - Linux on IBM Z and LinuxONE
 
     ## Operator versions
-    
+
      - 4.19.3
 
     ## Prerequisites

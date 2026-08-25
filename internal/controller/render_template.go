@@ -33,7 +33,6 @@ import (
 	util "github.com/IBM/ibm-common-service-operator/v4/internal/controller/common"
 	"github.com/IBM/ibm-common-service-operator/v4/internal/controller/constant"
 	"github.com/IBM/ibm-common-service-operator/v4/internal/controller/size"
-	utilyaml "github.com/ghodss/yaml"
 )
 
 func (r *CommonServiceReconciler) getNewConfigs(cs *unstructured.Unstructured) ([]interface{}, map[string]string, error) {
@@ -185,15 +184,14 @@ func (r *CommonServiceReconciler) getNewConfigs(cs *unstructured.Unstructured) (
 
 	if tolerations := cs.Object["spec"].(map[string]interface{})["tolerations"]; tolerations != nil {
 		klog.Info("Applying tolerations configuration")
+		// Use compact JSON instead of multi-line YAML block to avoid "block sequence
+		// entries are not allowed in this context" when the JSON array is substituted
+		// inline into "tolerations: placeholder" in the template.
 		tolerationBytes, err := json.Marshal(tolerations)
 		if err != nil {
 			return nil, nil, err
 		}
-		tolerationYAML, err := utilyaml.JSONToYAML(tolerationBytes)
-		if err != nil {
-			return nil, nil, err
-		}
-		tolerationConfig, err := convertStringToSlice(strings.ReplaceAll(constant.ServiceTolerationsTemplate, "placeholder", strings.TrimSpace(string(tolerationYAML))))
+		tolerationConfig, err := convertStringToSlice(strings.ReplaceAll(constant.ServiceTolerationsTemplate, "placeholder", string(tolerationBytes)))
 		if err != nil {
 			return nil, nil, err
 		}

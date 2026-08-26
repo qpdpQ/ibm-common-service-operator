@@ -26,6 +26,7 @@ import (
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -53,7 +54,47 @@ var (
 // CertificateReconciler reconciles a Certificate object
 type PodRefreshReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme                     *runtime.Scheme
+	daemonSetPermissionChecker daemonSetPermissionChecker
+}
+
+type daemonSetPermissionChecker interface {
+	Check(ctx context.Context, namespace string) (daemonSetAccessResult, error)
+}
+
+type daemonSetAccessResult struct {
+	allowed    bool
+	deniedVerb string
+}
+
+type selfSubjectDaemonSetPermissionChecker struct {
+	client client.Client
+}
+
+func (c selfSubjectDaemonSetPermissionChecker) Check(ctx context.Context, namespace string) (daemonSetAccessResult, error) {
+	for _, verb := range []string{"list", "watch", "update"} {
+		review := &authorizationv1.SelfSubjectAccessReview{
+			Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+				ResourceAttributes: &authorizationv1.ResourceAttributes{
+					Group:     "apps",
+					Resource:  "daemonsets",
+					Namespace: namespace,
+					Verb:      verb,
+				},
+			},
+		}
+		if err := c.client.Create(ctx, review); err != nil {
+			return daemonSetAccessResult{}, err
+		}
+		if review.Status.EvaluationError != "" {
+			return daemonSetAccessResult{}, fmt.Errorf("failed to evaluate %q permission for daemonsets in namespace %q: %s", verb, namespace, review.Status.EvaluationError)
+		}
+		if !review.Status.Allowed {
+			return daemonSetAccessResult{deniedVerb: verb}, nil
+		}
+	}
+
+	return daemonSetAccessResult{allowed: true}, nil
 }
 
 // //+kubebuilder:rbac:groups=apps,resources=deployments;statefulsets;daemonsets,verbs=get;list;watch;create;update;patch
@@ -106,7 +147,7 @@ func (r *PodRefreshReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			"Secret", cert.Spec.SecretName,
 			"Certificate", cert.Name)
 
-		if err := r.restart(cert.Spec.SecretName, cert.Name, cert.Namespace, cert.Status.NotBefore.Format("2006-1-2.150405")); err != nil {
+		if err := r.restart(ctx, cert.Spec.SecretName, cert.Name, cert.Namespace, cert.Status.NotBefore.Format("2006-1-2.150405")); err != nil {
 			reqLogger.Error(err, "Failed to refresh pod")
 			return ctrl.Result{}, err
 		}
@@ -269,12 +310,8 @@ func (r *PodRefreshReconciler) calculateBackoffDelay(elapsed time.Duration) time
 
 // pod refresh is enabled. It will edit the deployments, statefulsets, and daemonsets
 // that use the secret being updated, which will trigger the pod to be restarted.
-func (r *PodRefreshReconciler) restart(secret, cert, namespace string, lastUpdated string) error {
+func (r *PodRefreshReconciler) restart(ctx context.Context, secret, cert, namespace string, lastUpdated string) error {
 	timeNow := time.Now().Format("2006-1-2.150405")
-	deployments := &appsv1.DeploymentList{}
-	if err := r.Client.List(context.TODO(), deployments); err != nil {
-		return fmt.Errorf("error getting deployments: %v", err)
-	}
 	deploymentsToUpdate, err := r.getDeploymentsNeedUpdate(secret, namespace, lastUpdated)
 	if err != nil {
 		return err
@@ -292,11 +329,44 @@ func (r *PodRefreshReconciler) restart(secret, cert, namespace string, lastUpdat
 		return err
 	}
 
-	daemonsetsToUpdate, err := r.getDaemonSetNeedUpdate(secret, namespace, lastUpdated)
+	checker := r.daemonSetPermissionChecker
+	if checker == nil {
+		checker = selfSubjectDaemonSetPermissionChecker{client: r.Client}
+	}
+	access, err := checker.Check(ctx, namespace)
 	if err != nil {
+		if errors.IsForbidden(err) || errors.IsUnauthorized(err) {
+			klog.Warningf("Unable to review DaemonSet permissions in namespace %q; skipping DaemonSet pod refresh: %v", namespace, err)
+			return nil
+		}
+		return fmt.Errorf("error reviewing daemonset permissions in namespace %q: %w", namespace, err)
+	}
+	if !access.allowed {
+		klog.Warningf("DaemonSet pod refresh is not permitted in namespace %q (missing %q permission); skipping DaemonSet management", namespace, access.deniedVerb)
+		return nil
+	}
+
+	daemonsetsToUpdate, err := r.getDaemonSetNeedUpdate(ctx, secret, namespace, lastUpdated)
+	if err != nil {
+		if errors.IsForbidden(err) {
+			klog.Warningf(
+				"DaemonSet list is forbidden in namespace %q after a successful access review; skipping DaemonSet pod refresh: %v",
+				namespace,
+				err,
+			)			
+			return nil
+		}
 		return err
 	}
-	if err := r.updateDaemonSetAnnotations(daemonsetsToUpdate, cert, secret, timeNow); err != nil {
+	if err := r.updateDaemonSetAnnotations(ctx, daemonsetsToUpdate, cert, secret, timeNow); err != nil {
+		if errors.IsForbidden(err) {
+			klog.Warningf(
+				"DaemonSet update is forbidden in namespace %q after a successful access review; skipping remaining DaemonSet pod refresh: %v",
+				namespace,
+				err,
+			)			
+			return nil
+		}
 		return err
 	}
 
@@ -412,14 +482,14 @@ NEXT_STATEFULSET:
 	return statefulsetsToUpdate, nil
 }
 
-func (r *PodRefreshReconciler) getDaemonSetNeedUpdate(secret, namespace, lastUpdated string) ([]appsv1.DaemonSet, error) {
+func (r *PodRefreshReconciler) getDaemonSetNeedUpdate(ctx context.Context, secret, namespace, lastUpdated string) ([]appsv1.DaemonSet, error) {
 	daemonsetsToUpdate := make([]appsv1.DaemonSet, 0)
 	daemonsets := &appsv1.DaemonSetList{}
 	listOpts := &client.ListOptions{
 		Namespace: namespace,
 	}
-	if err := r.Client.List(context.TODO(), daemonsets, listOpts); err != nil {
-		return daemonsetsToUpdate, fmt.Errorf("error getting daemonsets: %v", err)
+	if err := r.Client.List(ctx, daemonsets, listOpts); err != nil {
+		return daemonsetsToUpdate, fmt.Errorf("error getting daemonsets: %w", err)
 	}
 NEXT_DAEMONSET:
 	for _, daemonset := range daemonsets.Items {
@@ -504,7 +574,7 @@ func (r *PodRefreshReconciler) updateStsAnnotations(statefulsetsToUpdate []appsv
 	return nil
 }
 
-func (r *PodRefreshReconciler) updateDaemonSetAnnotations(daemonsetsToUpdate []appsv1.DaemonSet, cert, secret, timeNow string) error {
+func (r *PodRefreshReconciler) updateDaemonSetAnnotations(ctx context.Context, daemonsetsToUpdate []appsv1.DaemonSet, cert, secret, timeNow string) error {
 	for _, daemonset := range daemonsetsToUpdate {
 		if daemonset.ObjectMeta.Labels == nil {
 			daemonset.ObjectMeta.Labels = make(map[string]string)
@@ -514,8 +584,8 @@ func (r *PodRefreshReconciler) updateDaemonSetAnnotations(daemonsetsToUpdate []a
 		}
 		daemonset.ObjectMeta.Labels[restartLabel] = timeNow
 		daemonset.Spec.Template.ObjectMeta.Labels[restartLabel] = timeNow
-		if err := r.Client.Update(context.TODO(), &daemonset); err != nil {
-			return fmt.Errorf("error updating daemonset: %v", err)
+		if err := r.Client.Update(ctx, &daemonset); err != nil {
+			return fmt.Errorf("error updating daemonset: %w", err)
 		}
 		logd.Info("Cert-Manager Restarting Resource:", "Certificate=", cert, "Secret=", secret, "DaemonSet=", daemonset.ObjectMeta.Name, "TimeNow=", timeNow)
 	}

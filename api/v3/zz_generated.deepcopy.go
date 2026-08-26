@@ -21,7 +21,8 @@
 package v3
 
 import (
-	"github.ibm.com/ibm-pg/ibm-pg-types/pkg/api/v1"
+	apiv1 "github.ibm.com/ibm-pg/ibm-pg-types/pkg/api/v1"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -107,7 +108,7 @@ func (in *CSPostgreSQLReplicaConfig) DeepCopyInto(out *CSPostgreSQLReplicaConfig
 	in.Replica.DeepCopyInto(&out.Replica)
 	if in.ExternalClusters != nil {
 		in, out := &in.ExternalClusters, &out.ExternalClusters
-		*out = make([]v1.ExternalCluster, len(*in))
+		*out = make([]apiv1.ExternalCluster, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -234,6 +235,18 @@ func (in *CommonServiceSpec) DeepCopyInto(out *CommonServiceSpec) {
 		}
 	}
 	out.License = in.License
+	if in.AutoScaleConfig != nil {
+		in, out := &in.AutoScaleConfig, &out.AutoScaleConfig
+		*out = new(bool)
+		**out = **in
+	}
+	if in.Tolerations != nil {
+		in, out := &in.Tolerations, &out.Tolerations
+		*out = make([]v1.Toleration, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.CSPostgreSQLReplica != nil {
 		in, out := &in.CSPostgreSQLReplica, &out.CSPostgreSQLReplica
 		*out = new(CSPostgreSQLReplicaConfig)

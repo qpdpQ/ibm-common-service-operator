@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pgv1 "github.ibm.com/ibm-pg/ibm-pg-types/pkg/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	apiv3 "github.com/IBM/ibm-common-service-operator/v4/api/v3"
@@ -342,6 +343,53 @@ func TestExtractCommonServiceConfigs_MultipleFeatures(t *testing.T) {
 	// All three features should contribute entries
 	assert.GreaterOrEqual(t, len(configs), 3,
 		"three feature flags should produce at least 3 config entries")
+}
+
+// TestExtractCommonServiceConfigs_Tolerations verifies that tolerations are
+// extracted into selected downstream service configs.
+func TestExtractCommonServiceConfigs_Tolerations(t *testing.T) {
+	cs := newCS()
+	cs.Spec.Tolerations = []corev1.Toleration{
+		{
+			Key:      "dedicated",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "common-service",
+			Effect:   corev1.TaintEffectNoSchedule,
+		},
+	}
+
+	configs, _, err := ExtractCommonServiceConfigs(cs, testServicesNs)
+	require.NoError(t, err)
+	require.NotEmpty(t, configs)
+
+	foundMongoDB := false
+	foundAuthentication := false
+	foundCommonWebUI := false
+	for _, c := range configs {
+		b, _ := json.Marshal(c)
+		configStr := string(b)
+		if strings.Contains(configStr, "\"name\":\"ibm-im-mongodb-operator\"") &&
+			strings.Contains(configStr, "\"mongoDB\"") &&
+			strings.Contains(configStr, "\"tolerations\"") &&
+			strings.Contains(configStr, "\"dedicated\"") {
+			foundMongoDB = true
+		}
+		if strings.Contains(configStr, "\"name\":\"ibm-im-operator\"") &&
+			strings.Contains(configStr, "\"authentication\"") &&
+			strings.Contains(configStr, "\"tolerations\"") &&
+			strings.Contains(configStr, "\"common-service\"") {
+			foundAuthentication = true
+		}
+		if strings.Contains(configStr, "\"name\":\"ibm-idp-config-ui-operator-v4.0\"") &&
+			strings.Contains(configStr, "\"commonWebUI\"") &&
+			strings.Contains(configStr, "\"tolerations\"") {
+			foundCommonWebUI = true
+		}
+	}
+
+	assert.True(t, foundMongoDB, "mongodb service should receive tolerations")
+	assert.True(t, foundAuthentication, "authentication service should receive tolerations")
+	assert.True(t, foundCommonWebUI, "commonWebUI service should receive tolerations")
 }
 
 // TestExtractCommonServiceConfigs_PostgreSQLReplica verifies that CSPostgreSQLReplica

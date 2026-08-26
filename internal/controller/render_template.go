@@ -182,6 +182,22 @@ func (r *CommonServiceReconciler) getNewConfigs(cs *unstructured.Unstructured) (
 		}
 	}
 
+	if tolerations := cs.Object["spec"].(map[string]interface{})["tolerations"]; tolerations != nil {
+		klog.Info("Applying tolerations configuration")
+		// Use compact JSON instead of multi-line YAML block to avoid "block sequence
+		// entries are not allowed in this context" when the JSON array is substituted
+		// inline into "tolerations: placeholder" in the template.
+		tolerationBytes, err := json.Marshal(tolerations)
+		if err != nil {
+			return nil, nil, err
+		}
+		tolerationConfig, err := convertStringToSlice(strings.ReplaceAll(constant.ServiceTolerationsTemplate, "placeholder", string(tolerationBytes)))
+		if err != nil {
+			return nil, nil, err
+		}
+		newConfigs = append(newConfigs, tolerationConfig...)
+	}
+
 	klog.Info("Applying size configuration")
 	var sizeConfigs []interface{}
 	serviceControllerMapping := make(map[string]string)

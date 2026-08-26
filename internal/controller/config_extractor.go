@@ -206,6 +206,23 @@ func extractFeatureConfigs(cs *apiv3.CommonService) ([]interface{}, error) {
 		}
 	}
 
+	// Extract tolerations configuration
+	if len(cs.Spec.Tolerations) > 0 {
+		klog.Info("Extracting tolerations configuration")
+		// Use compact JSON instead of multi-line YAML block to avoid "block sequence
+		// entries are not allowed in this context" when the JSON array is substituted
+		// inline into "tolerations: placeholder" in the template.
+		tolerationBytes, err := json.Marshal(cs.Spec.Tolerations)
+		if err != nil {
+			return nil, err
+		}
+		tolerationConfig, err := convertStringToSlice(strings.ReplaceAll(constant.ServiceTolerationsTemplate, "placeholder", string(tolerationBytes)))
+		if err != nil {
+			return nil, err
+		}
+		configs = append(configs, tolerationConfig...)
+	}
+
 	// Extract CSPostgreSQLReplica configuration
 	if cs.Spec.CSPostgreSQLReplica != nil {
 		klog.Info("Extracting CSPostgreSQLReplica configuration")

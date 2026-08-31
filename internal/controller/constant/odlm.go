@@ -2541,6 +2541,14 @@ spec:
                 - get
                 - list
                 - watch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+              verbs:
+                - get
+                - list
+                - watch
       - apiVersion: rbac.authorization.k8s.io/v1
         kind: RoleBinding
         name: common-service-db-pg-migration-rolebinding-{{ .OperatorNs }}

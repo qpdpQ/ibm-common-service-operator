@@ -2082,7 +2082,11 @@ spec:
                 track_io_timing: "on"
                 pg_stat_statements.track: all
                 pg_stat_statements.max: "10000"
-                max_slot_wal_keep_size: "8GB"
+                max_slot_wal_keep_size: "5GB"
+                wal_keep_size: "1GB"
+                max_wal_size: "2GB"
+                wal_sender_timeout: "30s"
+                wal_receiver_timeout: "30s"
               pg_hba:
                 - hostssl im im_user all cert
                 - hostssl zen zen_user all cert
